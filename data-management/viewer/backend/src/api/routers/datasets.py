@@ -25,7 +25,7 @@ from ..models.datasources import (
     EpisodeMeta,
     TrajectoryPoint,
 )
-from ..services.dataset_service import DatasetService, get_dataset_service
+from ..services.dataset_service import DatasetService, EpisodeLoadError, get_dataset_service
 from ..services.video_transcode import ensure_browser_compatible
 from ..validation import (
     SAFE_CAMERA_NAME_PATTERN,
@@ -483,7 +483,10 @@ async def warm_cache(
     loaded = 0
     total = min(count, dataset.total_episodes)
     for idx in range(total):
-        episode = await service.get_episode(dataset_id, idx)
+        try:
+            episode = await service.get_episode(dataset_id, idx)
+        except EpisodeLoadError:
+            continue
         if episode is not None:
             loaded += 1
 

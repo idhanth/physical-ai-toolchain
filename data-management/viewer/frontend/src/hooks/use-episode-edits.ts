@@ -5,7 +5,9 @@ import { ApiClientError, apiRequestVersioned, mutationPreconditionHeaders } from
 import { recordDiagnosticEvent } from '@/lib/playback-diagnostics'
 import { useEditStore } from '@/stores/edit-store'
 import { buildEditOperations, buildEditStateFromOperations } from '@/stores/edit-store-helpers'
-import type { EpisodeEditOperations, SavedEditBaseline } from '@/types/episode-edit'
+import type { EpisodeEditOperations, SavedEditBaseline, SubtaskSegment } from '@/types/episode-edit'
+
+const EMPTY_SUBTASKS: SubtaskSegment[] = []
 
 interface EditApiState {
   source_id: string
@@ -99,11 +101,14 @@ async function requestEdits(
     ) {
       throw new Error('Saved edit descriptor scope does not match the selected episode.')
     }
-    const operations = buildEditOperations({
-      datasetId,
-      episodeIndex,
-      ...buildEditStateFromOperations(data.saved?.operations ?? { datasetId, episodeIndex }),
-    })!
+    const operations = {
+      ...buildEditOperations({
+        datasetId,
+        episodeIndex,
+        ...buildEditStateFromOperations(data.saved?.operations ?? { datasetId, episodeIndex }),
+      })!,
+      subtasks: data.saved?.operations.subtasks,
+    }
     recordDiagnosticEvent(
       'persistence',
       submitted ? 'edit-save-completed' : 'edit-read-completed',
@@ -125,10 +130,12 @@ async function requestEdits(
   }
 }
 
+/** Recover scoped drafts and saved edits, initializing new scopes from recorded subtasks. */
 export function useEpisodeEdits(
   datasetId: string | null,
   episodeIndex: number | null,
   principalScopeId: string | undefined,
+  recordedSubtasks: SubtaskSegment[] = EMPTY_SUBTASKS,
 ) {
   const draftHydrated = useEditStore((state) => state.draftHydrated)
   const draftError = useEditStore((state) => state.draftError)
@@ -148,9 +155,9 @@ export function useEpisodeEdits(
       current.episodeIndex !== episodeIndex ||
       current.principalScopeId !== principalScopeId
     ) {
-      current.initializeEdit(datasetId, episodeIndex, principalScopeId)
+      current.initializeEdit(datasetId, episodeIndex, principalScopeId, recordedSubtasks)
     }
-  }, [datasetId, episodeIndex, principalScopeId])
+  }, [datasetId, episodeIndex, principalScopeId, recordedSubtasks])
   useEffect(() => {
     if (query.data && !query.isFetching && !query.isError && draftHydrated) {
       useEditStore.getState().hydrateSavedEdits(query.data)

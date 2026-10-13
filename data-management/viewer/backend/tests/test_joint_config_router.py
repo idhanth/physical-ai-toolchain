@@ -231,6 +231,28 @@ def test_given_azure_write_failure_when_saving_then_reports_safe_error(
     assert provider.objects == {}
 
 
+def _build_lerobot_dataset(root: Path, state_names: list[str]) -> None:
+    """Materialize the minimal LeRobot layout discovery reads, with named state channels."""
+    (root / "meta").mkdir(parents=True, exist_ok=True)
+    (root / "data").mkdir(exist_ok=True)
+    (root / "meta" / "info.json").write_text(
+        json.dumps(
+            {
+                "codebase_version": "v2.1",
+                "fps": 30,
+                "total_episodes": 1,
+                "chunks_size": 1000,
+                "data_path": "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet",
+                "features": {
+                    "observation.state": {"dtype": "float32", "shape": [len(state_names)], "names": state_names},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "meta" / "tasks.jsonl").write_text("", encoding="utf-8")
+
+
 class TestDatasetJointConfig:
     """Per-dataset joint configuration endpoints."""
 
@@ -277,7 +299,7 @@ class TestDatasetJointConfig:
             assert "robot/lerobot/meta/joint_config.json" in settings_backend.objects
         assert not (tmp_path / "robot--lerobot").exists()
 
-    def test_get_returns_defaults_without_writing(self, client: TestClient, tmp_path: Path) -> None:
+    def test_get_returns_hardcoded_defaults_without_writing(self, client: TestClient, tmp_path: Path) -> None:
         response = client.get("/api/datasets/ds-one/joint-config")
         assert response.status_code == 200
 
@@ -290,6 +312,34 @@ class TestDatasetJointConfig:
 
         assert not (tmp_path / "ds-one").exists()
         assert "etag" not in response.headers
+
+    def test_get_derives_labels_from_dataset_state_names_without_writing(
+        self, client: TestClient, tmp_path: Path
+    ) -> None:
+        _build_lerobot_dataset(tmp_path / "robot" / "lerobot", ["arm_1", "arm_2", "gripper_1"])
+
+        response = client.get("/api/datasets/robot--lerobot/joint-config")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["labels"] == {"0": "arm_1", "1": "arm_2", "2": "gripper_1"}
+        assert body["groups"] == [{"id": "state", "label": "State", "indices": [0, 1, 2]}]
+        assert not (tmp_path / "robot" / "lerobot" / "meta" / "joint_config.json").exists()
+        assert not (tmp_path / "robot--lerobot").exists()
+
+    def test_put_saves_nested_ids_inside_the_dataset_and_wins_over_names(
+        self, client: TestClient, tmp_path: Path
+    ) -> None:
+        _build_lerobot_dataset(tmp_path / "robot" / "lerobot", ["arm_1", "arm_2", "gripper_1"])
+        saved = {"labels": {"0": "Shoulder"}, "groups": [{"id": "arm", "label": "Arm", "indices": [0]}]}
+
+        response = client.put("/api/datasets/robot--lerobot/joint-config", json=saved, headers={"If-None-Match": "*"})
+
+        assert response.status_code == 200
+        config_file = tmp_path / "robot" / "lerobot" / "meta" / "joint_config.json"
+        assert json.loads(config_file.read_text(encoding="utf-8"))["labels"] == {"0": "Shoulder"}
+        assert not (tmp_path / "robot--lerobot").exists()
+        assert client.get("/api/datasets/robot--lerobot/joint-config").json()["labels"] == {"0": "Shoulder"}
 
     def test_get_returns_persisted_config(self, client, tmp_path):
         config_file = tmp_path / "ds-two" / "meta" / "joint_config.json"

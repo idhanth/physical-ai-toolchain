@@ -13,6 +13,7 @@ import {
 import { DataviewerEpisodeViewer } from '../DataviewerEpisodeViewer'
 
 const mockSetCurrentEpisode = vi.fn()
+const mockStoreState = { currentDatasetId: 'ds-1' as string | null }
 
 vi.mock('@/hooks/use-datasets', () => ({
   useEpisode: vi.fn(),
@@ -20,8 +21,15 @@ vi.mock('@/hooks/use-datasets', () => ({
 
 vi.mock('@/stores', () => ({
   useEpisodeStore: (
-    selector: (state: { setCurrentEpisode: typeof mockSetCurrentEpisode }) => unknown,
-  ) => selector({ setCurrentEpisode: mockSetCurrentEpisode }),
+    selector: (state: {
+      setCurrentEpisode: typeof mockSetCurrentEpisode
+      currentDatasetId: string | null
+    }) => unknown,
+  ) =>
+    selector({
+      setCurrentEpisode: mockSetCurrentEpisode,
+      currentDatasetId: mockStoreState.currentDatasetId,
+    }),
 }))
 
 vi.mock('@/components/annotation-workspace/AnnotationWorkspace', () => ({
@@ -54,6 +62,7 @@ describe('DataviewerEpisodeViewer', () => {
     mockSetCurrentEpisode.mockReset()
     disableDiagnostics()
     clearDiagnosticEvents()
+    mockStoreState.currentDatasetId = 'ds-1'
   })
 
   it('renders the AnnotationWorkspace once the episode loads', () => {
@@ -64,6 +73,31 @@ describe('DataviewerEpisodeViewer', () => {
     } as unknown as ReturnType<typeof useEpisode>)
 
     render(<DataviewerEpisodeViewer {...baseProps} />)
+
+    expect(screen.getByTestId('annotation-workspace')).toBeInTheDocument()
+  })
+
+  it('waits for the store to hold an episode of its dataset before rendering the workspace', () => {
+    const episode = { meta: { index: 0 }, episode_index: 0, length: 10 }
+    vi.mocked(useEpisode).mockReturnValue({
+      data: episode,
+      principalScopeId: 'principal-test',
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useEpisode>)
+    mockStoreState.currentDatasetId = 'previous-dataset'
+
+    const { rerender } = render(<DataviewerEpisodeViewer {...baseProps} />)
+
+    expect(screen.queryByTestId('annotation-workspace')).not.toBeInTheDocument()
+    expect(screen.getByText('Loading episode 0...')).toBeInTheDocument()
+    expect(mockSetCurrentEpisode).toHaveBeenCalledWith(episode, {
+      datasetId: 'ds-1',
+      principalScopeId: 'principal-test',
+    })
+
+    mockStoreState.currentDatasetId = 'ds-1'
+    rerender(<DataviewerEpisodeViewer {...baseProps} />)
 
     expect(screen.getByTestId('annotation-workspace')).toBeInTheDocument()
   })

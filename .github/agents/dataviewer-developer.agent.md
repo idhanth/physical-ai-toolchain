@@ -38,6 +38,8 @@ Enter only the phases needed for the request. Reuse running services; launch or 
 
 Start the dataviewer app, optionally configuring the dataset path.
 
+If the caller supplies the URL of a Dataviewer that is already running, such as the Sim Workspace Command Center's instance in a Sim-to-Real handoff, open that URL in Step 3 and skip Steps 1 and 2. Starting another copy would put a second Dataviewer on the same data.
+
 #### Step 1: Configure Dataset Path (if provided)
 
 If the user provides a dataset path:
@@ -60,7 +62,7 @@ cd data-management/viewer && BACKEND_PORT=${backendPort} FRONTEND_PORT=${fronten
 
 #### Step 3: Open in Browser
 
-1. Open `http://localhost:${frontendPort}` (default 5173) using `open_browser_page`, or reuse the already shared frontend page.
+1. Open the supplied URL, or `http://localhost:${frontendPort}` (default 5173), using `open_browser_page`, or reuse the already shared frontend page.
 2. Discover browser tools through the host's tool search before calling deferred tools. Native capabilities include `read_page`, `run_playwright_code`, `click_element`, `navigate_page` and `screenshot_page`; a configured Playwright MCP provider may expose `browser_snapshot`, `browser_click`, `browser_navigate` and related tools. Use the available provider; equivalent native reads do not require MCP reconfiguration.
 3. Take a fresh accessible-role/name snapshot (`read_page` or `browser_snapshot`) to confirm the UI loaded. If using the configured headless MCP provider, the user sees the app in SimpleBrowser while automation runs without a separate window.
 4. Report the loaded datasets and episode counts from the Dataset catalog, including stale/metadata warnings. These observations do not establish backend health or Blob synchronization.
@@ -70,6 +72,11 @@ Proceed to Phase 2 for browsing, Phase 3 for annotation or Phase 4 for feature c
 ### Phase 2: Interactive Browsing
 
 Use available native browser tools or the configured Playwright MCP tools to interact with the running dataviewer. The user can view the app through `open_browser_page`; configured headless Playwright operates on the same URL without a separate browser window. Separate sessions share backend persistence, not necessarily unsaved client state. If automation is unavailable, open the page and guide manual interaction, reporting the limit without claiming execution.
+
+The Edit Tools trajectory editor adjusts the recorded frame under the playhead, and its adjustments preview on the plot. HDF5 exports keep the recorded `data/qpos` and add the adjustments beside it as `data/qpos_adjusted`, with `data/qpos_adjusted_mask` marking the edited rows.
+LeRobot v3.0 sources whose camera features are non-depth videos export to a new LeRobot dataset in a new or empty folder; image features and depth video are refused. `observation.state` stays as recorded, the adjustments go to `adjusted.observation.state` and its mask, and `dataviewer-export.json` maps output frames to source frames.
+Subtasks become LeRobot `subtask` rows in `language_persistent`, each starting at its first surviving frame, and recorded language annotations move with the edited frames.
+Reopened exports show their subtasks in the editor, and re-exports keep unchanged ones as recorded. The export dialog can also write each episode's latest saved language instruction as `task_aug` and `plan` rows.
 
 #### Available UI Interactions
 
@@ -83,7 +90,7 @@ Use available native browser tools or the configured Playwright MCP tools to int
 - Check console: monitor browser console errors and warnings.
 - Inspect network: inspect API requests and responses without exposing credentials or private payloads.
 
-#### Playwright Interaction Patterns
+#### Browser Interaction Patterns
 
 When the user asks to browse or inspect the app:
 
@@ -176,9 +183,9 @@ Batch analysis across all episodes using Python scripts via the terminal for eff
 
 Local labels are stored at `{DATA_DIR}/{dataset_id}/meta/episode_labels.json`. Clear labels through revision-conditional API updates when requested, not by overwriting a running server's files.
 
-#### Step 4: Verify via Playwright UI
+#### Step 4: Verify in the UI
 
-1. Verify API persistence first; preserve unsaved drafts before refreshing the page.
+1. Verify API persistence first; preserve unsaved drafts before refreshing with `navigate_page` or `browser_navigate` when a refresh is needed.
 2. Wait for episodes to load and capture a fresh accessible snapshot.
 3. Take a screenshot showing labeled episodes in the sidebar.
 4. Click label filter buttons to verify counts (e.g., "31 / 64 Episodes" when filtering by LEFT).
@@ -265,7 +272,7 @@ Follow the skill's sample, human review, explicit approval and batch recipe. Bin
 
 Treat HTTP 202 as acceptance only. Poll durable status, inspect target errors and retrieve canonical evidence. Distinguish succeeded, partial, failed and cancelled work; use the skill's status/cancel/retry and restart recovery guidance. JSONL exports do not prove that viewer evidence is reusable.
 
-#### Step 4: Verify in the UI
+#### Step 4: Verify the Judge Panel in the UI
 
 1. Capture a fresh accessible snapshot in Trajectory, expand Episode Analysis and locate Judge assessment.
 2. Use the skill's current role-based Run judge pattern only when submission is authorized. Wait for terminal job status and evidence read-back, then verify the corresponding SUCCESS, FAILURE or Inconclusive display.
@@ -279,8 +286,6 @@ Report dataset ID, actual judged/applied/error counts, model/runtime and prompt 
 Distinguish pending work, conflicts and safe HTTP error categories: 404 for missing/inaccessible resources, 422 for invalid input including rejected instruction overrides, and 409 for saved-state/configuration conflicts. Report remaining browser, assistive-technology and target-runtime evidence gaps.
 
 Return to Phase 2 for episode review or Phase 3 for requested label corrections.
-
-Return to Phase 2 for episode-level review or Phase 3 if the judge findings should drive label corrections.
 
 ## Conversation Guidelines
 

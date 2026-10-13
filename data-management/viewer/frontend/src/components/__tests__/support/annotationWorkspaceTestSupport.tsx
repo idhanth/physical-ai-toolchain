@@ -1,6 +1,7 @@
 import { cleanup } from '@testing-library/react'
 import { vi } from 'vitest'
 
+import type { RecordedSubtask } from '@/types/api'
 import type { ImageTransform } from '@/types/episode-edit'
 
 const hoisted = vi.hoisted(() => {
@@ -35,6 +36,7 @@ const hoisted = vi.hoisted(() => {
     cameraTransforms: {} as Record<string, ImageTransform>,
     trajectoryData: [{ jointPositions: [1], timestamp: 0, gripperState: 0 }],
     subtasks: [{ id: 'subtask-1', frameRange: [2, 6] as [number, number] }],
+    recordedSubtasks: [] as RecordedSubtask[] | undefined,
   }
 
   const clearDiagnosticEvents = vi.fn((channel?: string) => {
@@ -323,11 +325,11 @@ vi.mock('@/hooks/use-annotations', () => ({
 }))
 
 vi.mock('@/hooks/use-episode-edits', () => ({
-  useEpisodeEdits: () => ({
+  useEpisodeEdits: vi.fn(() => ({
     isReady: !hoisted.state.editPersistenceError,
     persistenceError: hoisted.state.editPersistenceError,
     resolveRecoveredEdits: hoisted.state.resolveRecoveredEdits,
-  }),
+  })),
   useSaveEpisodeEdits: () => ({ mutateAsync: hoisted.saveEpisodeDraft, isPending: false }),
 }))
 
@@ -415,6 +417,7 @@ vi.mock('@/stores', () => ({
         videoUrls: { main: '/video.mp4' },
         cameras: ['main'],
         trajectoryData: hoisted.state.trajectoryData,
+        subtasks: hoisted.state.recordedSubtasks,
       },
     }),
   usePlaybackControls: () => ({
@@ -476,6 +479,8 @@ export function setupAnnotationWorkspaceTestCase() {
   testState.autoLoop = false
   testState.cameraTransforms = {}
   testState.subtasks = [{ id: 'subtask-1', frameRange: [2, 6] }]
+  testState.recordedSubtasks = []
+  mockInitializeEdit.mockClear()
 
   mockSaveEpisodeLabels.mockReset()
   mockSetCurrentFrame.mockReset()

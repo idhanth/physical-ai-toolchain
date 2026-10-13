@@ -20,7 +20,7 @@ import {
 } from '@/stores'
 import { getEffectiveFrameCount, getOriginalIndex } from '@/stores/edit-store'
 import { useLabelStore } from '@/stores/label-store'
-import { createDefaultSubtask } from '@/types/episode-edit'
+import { createDefaultSubtask, recordedSubtaskSegments } from '@/types/episode-edit'
 
 import { useAnnotationWorkspaceDiagnostics } from './useAnnotationWorkspaceDiagnostics'
 import { useAnnotationWorkspaceEpisodeActions } from './useAnnotationWorkspaceEpisodeActions'
@@ -80,10 +80,15 @@ export function useAnnotationWorkspaceShell({
   const setEpisodeLabelsInStore = useLabelStore((state) => state.setEpisodeLabels)
   const removedFrames = useEditStore((state) => state.removedFrames)
   const clearTransforms = useEditStore((state) => state.clearTransforms)
+  const recordedSubtasks = useMemo(
+    () => recordedSubtaskSegments(currentEpisode?.subtasks ?? []),
+    [currentEpisode?.subtasks],
+  )
   const savedEdits = useEpisodeEdits(
     currentDataset?.id ?? null,
     currentEpisode?.meta.index ?? null,
     principalQuery.data?.scopeId,
+    recordedSubtasks,
   )
   const saveEdits = useSaveEpisodeEdits()
   const subtasks = useEditStore((state) => state.subtasks)

@@ -62,6 +62,8 @@ interface EditState {
   insertedFrames: Map<number, FrameInsertion>
   /** Sub-task segments */
   subtasks: SubtaskSegment[]
+  /** Subtasks recorded with the episode, which the editor starts from */
+  recordedSubtasks: SubtaskSegment[]
   /** Trajectory adjustments per frame */
   trajectoryAdjustments: Map<number, TrajectoryAdjustment>
 
@@ -84,8 +86,13 @@ interface EditState {
 }
 
 interface EditActions {
-  /** Initialize edit state for an episode */
-  initializeEdit: (datasetId: string, episodeIndex: number, principalScopeId?: string) => void
+  /** Initialize edit state for an episode, starting from the subtasks recorded with it */
+  initializeEdit: (
+    datasetId: string,
+    episodeIndex: number,
+    principalScopeId?: string,
+    recordedSubtasks?: SubtaskSegment[],
+  ) => void
   /** Load existing edit operations */
   loadEditOperations: (ops: EpisodeEditOperations) => void
 
@@ -170,6 +177,7 @@ const initialState: EditState = {
   removedFrames: new Set(),
   insertedFrames: new Map(),
   subtasks: [],
+  recordedSubtasks: [],
   trajectoryAdjustments: new Map(),
   originalState: null,
   isDirty: false,
@@ -283,7 +291,7 @@ export const useEditStore = create<EditStore>()(
 
       const adoptServerEdits = (baseline: SavedEditBaseline) => {
         const snapshot = structuredClone(baseline)
-        const operations = buildEditStateFromOperations(snapshot.operations)
+        const operations = buildEditStateFromOperations(snapshot.operations, get().recordedSubtasks)
         set(
           {
             ...operations,
@@ -302,17 +310,23 @@ export const useEditStore = create<EditStore>()(
         const snapshot = structuredClone(baseline)
         updateState('rebaseRecoveredEdits', () => ({
           serverBaseline: snapshot,
-          originalState: buildEditStateFromOperations(snapshot.operations),
+          originalState: buildEditStateFromOperations(snapshot.operations, get().recordedSubtasks),
         }))
       }
 
       return {
         ...initialState,
 
-        initializeEdit: (datasetId, episodeIndex, principalScopeId = 'local') => {
+        initializeEdit: (
+          datasetId,
+          episodeIndex,
+          principalScopeId = 'local',
+          recordedSubtasks = [],
+        ) => {
           const generation = ++sessionGeneration
           const draftKey = getEpisodeDraftKey(datasetId, episodeIndex, principalScopeId)
           const savedDraft = get().savedEpisodeDrafts[draftKey]
+          set({ recordedSubtasks }, false, 'setRecordedSubtasks')
 
           const newState = {
             datasetId,
@@ -325,7 +339,7 @@ export const useEditStore = create<EditStore>()(
             cameraTransforms: {},
             removedFrames: new Set<number>(),
             insertedFrames: new Map<number, FrameInsertion>(),
-            subtasks: [],
+            subtasks: structuredClone(recordedSubtasks),
             trajectoryAdjustments: new Map<number, TrajectoryAdjustment>(),
           }
 
@@ -333,7 +347,7 @@ export const useEditStore = create<EditStore>()(
             {
               ...newState,
               originalState: savedDraft?.baseline
-                ? buildEditStateFromOperations(savedDraft.baseline.operations)
+                ? buildEditStateFromOperations(savedDraft.baseline.operations, recordedSubtasks)
                 : buildOriginalEditState(newState),
               isDirty: false,
               validationErrors: [],
@@ -376,7 +390,10 @@ export const useEditStore = create<EditStore>()(
                   draftHydrated: true,
                   serverBaseline: persistedDraft.baseline,
                   originalState: persistedDraft.baseline
-                    ? buildEditStateFromOperations(persistedDraft.baseline.operations)
+                    ? buildEditStateFromOperations(
+                        persistedDraft.baseline.operations,
+                        recordedSubtasks,
+                      )
                     : state.originalState,
                   savedEpisodeDrafts: {
                     ...state.savedEpisodeDrafts,
@@ -408,10 +425,10 @@ export const useEditStore = create<EditStore>()(
         loadEditOperations: (ops) => {
           updateState(
             'loadEditOperations',
-            () => ({
+            (state) => ({
               datasetId: ops.datasetId,
               episodeIndex: ops.episodeIndex,
-              ...buildEditStateFromOperations(ops),
+              ...buildEditStateFromOperations(ops, state.recordedSubtasks),
             }),
             { validationErrors: (state) => validateSegments(state.subtasks) },
           )
@@ -443,7 +460,7 @@ export const useEditStore = create<EditStore>()(
             JSON.stringify(
               buildEditOperations({
                 ...current,
-                ...buildEditStateFromOperations(baseline.operations),
+                ...buildEditStateFromOperations(baseline.operations, current.recordedSubtasks),
               }),
             )
           if (!sameEditScope(current, baseline) || !current.draftHydrated || current.draftError) {
@@ -499,10 +516,10 @@ export const useEditStore = create<EditStore>()(
           updateState('acknowledgeSave', () => ({
             ...(JSON.stringify(buildEditOperations(current)) ===
             JSON.stringify(submitted.operations)
-              ? buildEditStateFromOperations(saved.operations)
+              ? buildEditStateFromOperations(saved.operations, current.recordedSubtasks)
               : {}),
             serverBaseline: structuredClone(saved),
-            originalState: buildEditStateFromOperations(saved.operations),
+            originalState: buildEditStateFromOperations(saved.operations, current.recordedSubtasks),
           }))
         },
 

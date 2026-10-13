@@ -38,6 +38,8 @@ export function DataviewerEpisodeViewer({
     refetch,
   } = useEpisode(datasetId, episodeIndex)
   const setCurrentEpisode = useEpisodeStore((state) => state.setCurrentEpisode)
+  // The workspace reads the store, which keeps the previous dataset's episode until this effect runs.
+  const storedDatasetId = useEpisodeStore((state) => state.currentDatasetId)
   const [navigationStatus, setNavigationStatus] = useState<string | null>(null)
   const hasCachedEpisode = !!episode
   const accessLost = error instanceof ApiClientError && [401, 403, 404].includes(error.status)
@@ -82,7 +84,7 @@ export function DataviewerEpisodeViewer({
   }, [navigationStatus])
 
   let content: ReactNode
-  if (isLoading) {
+  if (isLoading || (episode && !error && storedDatasetId !== datasetId)) {
     content = (
       <div className="flex h-full items-center justify-center">
         <div role="status" aria-live="polite" className="text-muted-foreground">

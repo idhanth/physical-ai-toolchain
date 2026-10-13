@@ -14,7 +14,7 @@ interface EpisodeState {
   currentEpisode: EpisodeData | null
   /** Current episode index */
   currentIndex: number
-  /** Current dataset ID */
+  /** Dataset the current episode belongs to */
   currentDatasetId: string | null
   principalScopeId: string | null
   /** Loading state */
@@ -32,7 +32,7 @@ interface EpisodeState {
 interface EpisodeActions {
   /** Set the list of episodes */
   setEpisodes: (episodes: EpisodeMeta[]) => void
-  /** Set the current episode data */
+  /** Set the episode and its scope; same-source refreshes preserve playback. */
   setCurrentEpisode: (
     episode: EpisodeData | null,
     scope?: { datasetId: string; principalScopeId: string },
@@ -109,8 +109,8 @@ export const useEpisodeStore = create<EpisodeStore>()(
         set(
           {
             currentEpisode: episode,
-            currentDatasetId: scope?.datasetId ?? null,
-            principalScopeId: scope?.principalScopeId ?? null,
+            currentDatasetId: episode ? (scope?.datasetId ?? null) : null,
+            principalScopeId: episode ? (scope?.principalScopeId ?? null) : null,
             currentIndex: episode?.meta.index ?? -1,
             currentFrame: sameSource
               ? Math.max(0, Math.min(previous.currentFrame, episode.meta.length - 1))

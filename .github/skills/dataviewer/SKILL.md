@@ -9,15 +9,18 @@ Launch and interact with the Dataset Analysis Tool, a full-stack application for
 
 ## Prerequisites
 
-| Platform | Requirement                          |
-|----------|--------------------------------------|
-| All      | Python 3.12+, Node.js 24+, npm, `uv` |
+| Platform | Requirement                                                                                                           |
+|----------|-----------------------------------------------------------------------------------------------------------------------|
+| All      | Python 3.12+, Node.js 24+, npm, `uv`                                                                                  |
+| All      | `ffmpeg` on `PATH` outside the backend container, for HDF5 camera video (OpenCV also works) and LeRobot episode clips |
 
 The backend virtual environment and repository-root npm workspace dependencies are auto-created on first launch by `start.sh`.
 
 ## Launch and Connect Workflow
 
 Follow these steps when a launch is required and authorized. Inspect existing terminals/task output first and reuse healthy services with matching configuration. Read-only inspection does not authorize restarts, inference or dataset writes. Use VS Code tasks for an already configured development session; use the launcher for requested overrides and readiness checks.
+
+When a caller or workflow supplies the URL of a Dataviewer it already runs, such as the instance the Sim Workspace Command Center opens for a workspace, skip Step 1 and open that URL in Step 2. Start `start.sh` only when no running instance is supplied, so one dataset folder never gets a second Dataviewer.
 
 ### Step 1 — Start the app
 
@@ -35,23 +38,29 @@ With a custom dataset path:
 cd data-management/viewer && ./start.sh --data-dir /path/to/datasets
 ```
 
-### Step 2 — Open SimpleBrowser
+### Step 2 — Open the app in the browser
 
-After confirming both services are running (look for `[OK] Backend is healthy` in terminal output), open the frontend in VS Code's SimpleBrowser using the `open_browser_page` tool:
+After confirming both services are running (look for `[OK] Backend is healthy` in terminal output), or when a running URL was supplied, open the frontend with the integrated browser's `open_browser_page` tool:
 
 ```text
 open_browser_page("http://localhost:5173")
 ```
 
 SimpleBrowser is the visual interface for the user when that provider is available. Configured headless Playwright automation runs in the background. Native browser tools can operate a shared page directly; separate browser sessions share persisted backend state, not necessarily unsaved drafts.
+Use the supplied URL, or substitute a non-default `FRONTEND_PORT` for `5173`.
 
-If a non-default `FRONTEND_PORT` was set, substitute that port instead of `5173`.
-
-### Step 3 — Load available browser tools
+### Step 3 — Load browser automation tools
 
 Use the host's tool search to discover available browser capabilities before calling deferred tools. Native tools include `read_page`, `run_playwright_code`, `navigate_page`, `click_element`, `type_in_page` and `screenshot_page`. Use those when available; an equivalent native read does not require MCP reconfiguration.
 
-If using Playwright MCP, configure **headless mode** so it does not open a separate browser window. Its visual feedback goes through SimpleBrowser (Step 2). A Playwright MCP server configuration in `.vscode/mcp.json` can use:
+Drive the UI with whichever browser tool family the host provides:
+
+| Tool family        | Tools                                                                                                                        | How it works                                       |
+|--------------------|------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------|
+| Integrated browser | `open_browser_page`, `navigate_page`, `read_page`, `click_element`, `type_in_page`, `run_playwright_code`, `screenshot_page` | Acts on the page the user sees                     |
+| Playwright MCP     | `browser_snapshot`, `browser_navigate`, `browser_click`, `browser_type`, `browser_evaluate`, `browser_take_screenshot`       | Acts headlessly on a separate copy of the same URL |
+
+For the Playwright MCP background workflow, configure **headless mode** so it does not open a separate browser window. Its visual feedback goes through SimpleBrowser (Step 2). A Playwright MCP server configuration in `.vscode/mcp.json` can use:
 
 ```json
 // .vscode/mcp.json
@@ -76,19 +85,18 @@ Find browser tools to read an accessible page snapshot, navigate, click, type an
 
 If no suitable provider is available, report the limit and guide manual inspection. When the user chooses the configured MCP provider, they can run **MCP: Start Server** then select **playwright** in the Command Palette. An empty tool search alone does not prove that a server is stopped.
 
-### Step 4 — Interact via Playwright MCP
+### Step 4 — Interact with the UI
 
-Playwright operates headlessly on the same URL as SimpleBrowser. Both see the same backend state, so API-driven changes (labels, annotations) appear in both.
+Both tool families see the same backend state, so API-driven changes (labels, annotations) appear in both.
 
-Once the tools are available, use the following patterns for all UI interaction:
-
-| Action             | Playwright MCP Tool                           | Notes                                                   |
-|--------------------|-----------------------------------------------|---------------------------------------------------------|
-| Capture page state | `read_page` / `browser_snapshot`              | Call first to inspect current accessible roles/names    |
-| Navigate to URL    | `navigate_page` / `browser_navigate`          | Preserve unsaved drafts before reload                   |
-| Click an element   | `click_element` / `browser_click`             | Use current snapshot refs and names                     |
-| Type into input    | `type_in_page` / `browser_type`               | For dataset filters or label inputs                     |
-| Take a screenshot  | `screenshot_page` / `browser_take_screenshot` | Verify appearance, not persistence or keyboard behavior |
+| Action             | Integrated browser    | Playwright MCP            | Notes                                         |
+|--------------------|-----------------------|---------------------------|-----------------------------------------------|
+| Capture page state | `read_page`           | `browser_snapshot`        | Inspect current accessible roles/names        |
+| Navigate to URL    | `navigate_page`       | `browser_navigate`        | Preserve unsaved drafts before reload         |
+| Click an element   | `click_element`       | `browser_click`           | Use current snapshot refs and names           |
+| Type into input    | `type_in_page`        | `browser_type`            | For dataset filters or label inputs           |
+| Run a script       | `run_playwright_code` | `browser_evaluate`        | For sliders, scrolling and multi-step checks  |
+| Take a screenshot  | `screenshot_page`     | `browser_take_screenshot` | Appearance, not persistence or keyboard proof |
 
 Take a fresh accessible snapshot before click/type actions and refresh refs after content changes. Use the [Frontend UI Structure](#frontend-ui-structure) below to orient; forced DOM clicks are not keyboard accessibility evidence.
 
@@ -328,6 +336,9 @@ Read the [backend environment example](../../../data-management/viewer/backend/.
 | `/api/analysis/anomaly-detection`          | POST   | Anomaly detection            |
 | `/api/ai/suggest-annotation`               | POST   | AI-suggested annotations     |
 
+When an episode's files can't be read, `GET /api/datasets/{id}/episodes/{idx}`, `detect`, `annotations/auto` and `export/preview` return HTTP 500 with `{"code": "EPISODE_LOAD_FAILED"}`, and the backend log has the cause.
+A failed export returns `"error": "Export failed"`, or a `complete` event with `"success": false` from the stream; the backend log has the reason.
+
 ## Annotation Workflow
 
 Annotation combines API calls for efficiency with Playwright UI interaction for verification. Use the API for bulk operations and the UI for visual review and spot-checking.
@@ -359,6 +370,7 @@ The `LanguageInstructionWidget` writes a structured payload through `PUT /api/da
 | `subtask_instructions` | Ordered subtask decomposition for hierarchical conditioning     | up to 100 entries, 1000 chars each |
 
 When a dataset task description is available the widget seeds the instruction with `source = template`; otherwise it creates a blank instruction with `source = human`. The source dropdown allows changing the value at any time.
+A LeRobot export can write the most recently saved instruction as LeRobot rows: the instruction and paraphrases as `task_aug`, and the subtask instructions as one numbered `plan` row at the first frame.
 
 ### Step 1 — Analyze trajectory data
 
@@ -514,9 +526,30 @@ For individual episode review or correction:
 
 Before judging, check saved-input readiness for every selected target and validation sample under the current source and principal. A clean active episode does not establish readiness elsewhere. Failed refreshes retain drafts and do not authorize work from stale acknowledgments. Interpret metadata warnings by source; HTTP 200, local-origin listings or provider availability do not prove Blob metadata synchronization.
 
+The Edit Tools trajectory editor adjusts state channels per frame, labelled with the dataset's own channel names, and the trajectory plot previews each adjustment.
+Adjustments belong to the recorded frame under the playhead; after frames are removed or inserted, the editor names that recorded frame, and an inserted frame can't be adjusted directly.
+HDF5 exports keep the recorded joint positions as `data/qpos` and add the adjustments beside them as `data/qpos_adjusted`, with `data/qpos_adjusted_mask` marking the edited rows and the adjustment list in the episode's `.meta.json`.
+Velocities, actions and the other exported arrays stay as recorded.
+
+LeRobot v3.0 sources whose camera features are non-depth videos, including sim captures, export to a new LeRobot v3.0 dataset at the output path; datasets with image features or depth video are refused. That path must be new or empty and outside the source; an existing empty directory, such as a mount point, is kept.
+The export locks the directory with a hidden `.dataviewer-export.lock` file and stages in a hidden `.dataviewer-export.partial` directory, so a second export to the same directory fails while the first runs.
+If the backend stops mid-export, or an export fails and can't remove what it moved, the next export to that directory cleans up first. It removes the earlier export's staging and the moved files that still match the identities that export recorded, and keeps a dataset whose move finished. Anything else stays, and exports there fail until it's removed.
+The cleanup never follows links and ignores a record whose paths don't describe a staged dataset. On Windows it leaves the earlier export's files, so remove them, including `.dataviewer-export.partial`, before exporting there again.
+LeRobot exports need a filesystem with file locking; on one without, the export fails and can leave an empty `.dataviewer-export.lock`.
+The export keeps `observation.state` and every other supported recorded feature, and adds adjustments as `adjusted.observation.state` with `adjusted.observation.state_mask`. The `adjusted.` prefix keeps both out of LeRobot policy inputs.
+Removing or inserting frames renumbers `frame_index` and `timestamp`. `dataviewer-export.json` maps every output frame to its source frame and records the edits and remapped subtasks.
+Subtasks shrink to the frames that survive the edits, and a LeRobot export also writes each one as a LeRobot `subtask` row in `language_persistent`, starting at its first output frame.
+LeRobot keeps a subtask active until the next one starts, so frames between two subtasks read as the earlier one; `dataviewer-export.json` keeps the exact ranges.
+Opening an export shows its subtasks in the editor: LeRobot rows run until the next one starts, and HDF5 `.subtasks.json` files keep exact ranges. Re-exporting keeps unchanged subtasks as recorded, writes changed ones in their place, and removes them when all are deleted; a saved draft takes precedence. `dataviewer-export.json` records `subtasks` as `null` when the export kept the recorded ones and `[]` when it removed them.
+Recorded language annotations move with the edited frames, apart from rows the exported subtasks or language instructions replace. Clearing **Include subtasks as LeRobot subtask annotations** in the export dialog leaves your subtask changes out; recorded annotations are still exported. For HDF5 the option reads **Include subtask metadata**, and clearing it still carries a recorded `.subtasks.json` forward.
+A LeRobot export has language columns when its source has them or when an exported episode gets subtask or language-instruction rows.
+**Include language instructions as LeRobot task phrasings and plan**, on by default for LeRobot sources, writes each episode's most recently saved language instruction as `task_aug` and `plan` rows that replace the recorded ones; `dataviewer-export.json` records whose instruction was used.
+API exports through `/export` and `/export/stream` include them too, unless the request body sets `"includeLanguageInstructions": false`.
+Each export is a separate dataset. LeRobot merges datasets only when their features match, so a cropped or adjusted export won't merge with an unedited one.
+
 ## Frontend UI Structure
 
-The React app has these key areas for Playwright interaction:
+The React app has these key areas for browser automation:
 
 | Area               | Selector Pattern                                     | Description                                                 |
 |--------------------|------------------------------------------------------|-------------------------------------------------------------|
@@ -533,18 +566,20 @@ Use fresh roles/names, not fixed header selectors or heading-based clicks. Obser
 
 ## Troubleshooting
 
-| Issue                                    | Solution                                                                                                                        |
-|------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| Backend fails to start                   | Recreate the locked environment with `cd backend && uv sync --frozen --python 3.12 --group dev --extra analysis --extra export` |
-| Frontend shows "Loading..." indefinitely | Verify backend is healthy: `curl http://localhost:8000/health`                                                                  |
-| No datasets visible                      | Check `DATA_DIR` in `backend/.env` points to a directory with dataset subdirectories                                            |
-| Port conflict                            | Set `BACKEND_PORT` or `FRONTEND_PORT` environment variables                                                                     |
-| CORS errors                              | Backend allows localhost ports 5173-5177; check the frontend port is in range                                                   |
-| Labels not persisted after restart       | Check the PUT response; resolve any HTTP 412 revision conflict, then verify the saved labels with GET                           |
-| Playwright opens separate Chrome window  | For the MCP background workflow, use `--headless`; reconfigure/restart only with authority                                      |
-| Snapshot refs stale after navigation     | Take a fresh `read_page` or `browser_snapshot` before clicking                                                                  |
-| Slider not responding to automation      | Use the agent's native input setter fallback as a state probe, not keyboard acceptance                                          |
-| Sidebar not scrolling                    | Use the agent's `aside ul` scrolling example through the available evaluation tool                                              |
+| Issue                                    | Solution                                                                                                                              |
+|------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
+| Backend fails to start                   | Recreate the locked environment with `cd backend && uv sync --frozen --python 3.12 --group dev --extra analysis --extra export`       |
+| Frontend shows "Loading..." indefinitely | Verify backend is healthy: `curl http://localhost:8000/health`                                                                        |
+| No datasets visible                      | Check `DATA_DIR` in `backend/.env` points to a directory with dataset subdirectories                                                  |
+| "The episode's files couldn't be read"   | The API returned 500 `EPISODE_LOAD_FAILED`; the backend log names the file and error                                                  |
+| Export reports "Export failed"           | Check the backend log: another export may be writing there, the directory may not be new or empty, or file locking may be unavailable |
+| Port conflict                            | Set `BACKEND_PORT` or `FRONTEND_PORT` environment variables                                                                           |
+| CORS errors                              | Backend allows localhost ports 5173-5177; check the frontend port is in range                                                         |
+| Labels not persisted after restart       | Check the PUT response; resolve any HTTP 412 revision conflict, then verify the saved labels with GET                                 |
+| Playwright opens separate Chrome window  | For the MCP background workflow, use `--headless`; reconfigure/restart only with authority                                            |
+| Snapshot refs stale after navigation     | Take a fresh `read_page` or `browser_snapshot` before clicking                                                                        |
+| Slider not responding to automation      | Use the agent's native input setter fallback as a state probe, not keyboard acceptance                                                |
+| Sidebar not scrolling                    | Use the agent's `aside ul` scrolling example through the available evaluation tool                                                    |
 
 ## VLM-as-Judge Workflow
 
@@ -598,7 +633,7 @@ VLM_JUDGE_CACHE_DIR=outputs/vlm-judge/cache
 5. Track the durable job to terminal status, then read canonical evidence/applicability before interpreting the outcome badge, progress, VOC, milestones and failure mode.
 6. **Force fresh** bypasses inference cache, not saved-input or approval checks. Judge-only evidence does not apply labels.
 
-### Playwright UI verification
+### Browser UI verification
 
 Use a fresh `read_page` or `browser_snapshot`, then click current accessible controls. With `run_playwright_code`, a locator-based pattern is:
 

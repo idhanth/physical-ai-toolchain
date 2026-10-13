@@ -96,6 +96,7 @@ def _get_base_path() -> str:
 
 
 def _dataset_config_path(dataset_id: str) -> Path:
+    """Resolve the config inside the dataset's own folder; ``parent--child`` IDs map to nested folders."""
     base = Path(_get_base_path())
     path = base.joinpath(*dataset_id.split("--"), "meta", "joint_config.json")
     return validate_path_containment(path, base)
@@ -181,6 +182,7 @@ async def _load_global_defaults() -> VersionedValue[JointConfig]:
 
 
 async def _state_name_config(dataset_id: str, dataset_service: DatasetService) -> JointConfig | None:
+    """Label each state channel with the dataset's own feature name, when declared."""
     dataset = await dataset_service.get_dataset(dataset_id)
     state = dataset.features.get("observation.state") if dataset is not None else None
     if state is None or not state.names:
@@ -193,6 +195,7 @@ async def _state_name_config(dataset_id: str, dataset_service: DatasetService) -
 
 
 async def _load_dataset_config(dataset_id: str, dataset_service: DatasetService) -> VersionedValue[JointConfig]:
+    """Read saved configuration with its revision, or derive defaults without writing."""
     stored = await _read_config(_dataset_config_path(dataset_id), dataset_id)
     if stored.value is not None:
         return stored

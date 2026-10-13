@@ -72,6 +72,7 @@ vi.mock('@/hooks/use-datasets', () => ({
       cameras: [],
       trajectoryData: undefined,
     },
+    principalScopeId: 'principal-one',
     isLoading: false,
     error: null,
   }),

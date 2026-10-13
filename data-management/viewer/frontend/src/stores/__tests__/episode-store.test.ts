@@ -111,6 +111,17 @@ describe('useEpisodeStore', () => {
 
       expect(useEpisodeStore.getState().currentIndex).toBe(-1)
     })
+
+    it('records the dataset the episode belongs to', () => {
+      const scope = { datasetId: 'dataset-a', principalScopeId: 'principal-one' }
+      useEpisodeStore.getState().setCurrentEpisode(mockEpisodeData, scope)
+      expect(useEpisodeStore.getState().currentDatasetId).toBe('dataset-a')
+      expect(useEpisodeStore.getState().principalScopeId).toBe('principal-one')
+
+      useEpisodeStore.getState().setCurrentEpisode(null, scope)
+      expect(useEpisodeStore.getState().currentDatasetId).toBeNull()
+      expect(useEpisodeStore.getState().principalScopeId).toBeNull()
+    })
   })
 
   describe('navigation', () => {

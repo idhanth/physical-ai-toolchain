@@ -14,9 +14,11 @@ import {
 } from '@/components/__tests__/support/annotationWorkspaceTestSupport'
 import { useAnnotationWorkspaceShell } from '@/components/annotation-workspace/useAnnotationWorkspaceShell'
 import * as annotationHooks from '@/hooks/use-annotations'
+import { useEpisodeEdits } from '@/hooks/use-episode-edits'
 import * as principalHooks from '@/hooks/use-principal-context'
 import { ApiClientError } from '@/lib/api-client'
 import { renderHookWithProviders } from '@/test-utils/render'
+import { SUBTASK_COLORS } from '@/types/episode-edit'
 
 describe('useAnnotationWorkspaceShell', () => {
   beforeEach(setupAnnotationWorkspaceTestCase)
@@ -124,5 +126,38 @@ describe('useAnnotationWorkspaceShell', () => {
       activeTab: 'trajectory',
       episodeIndex: 0,
     })
+  })
+
+  it('passes recorded subtasks to scoped edit recovery', () => {
+    testState.recordedSubtasks = [
+      {
+        id: 'recorded-0',
+        label: 'Reach',
+        frameRange: [0, 4],
+        color: null,
+        source: 'recorded',
+        description: null,
+      },
+    ]
+
+    renderHookWithProviders(() => useAnnotationWorkspaceShell({}))
+
+    expect(useEpisodeEdits).toHaveBeenLastCalledWith('dataset-1', 0, 'principal-test', [
+      {
+        id: 'recorded-0',
+        label: 'Reach',
+        frameRange: [0, 4],
+        color: SUBTASK_COLORS[0],
+        source: 'recorded',
+      },
+    ])
+  })
+
+  it('passes no recorded subtasks to scoped edit recovery when the episode records none', () => {
+    testState.recordedSubtasks = undefined
+
+    renderHookWithProviders(() => useAnnotationWorkspaceShell({}))
+
+    expect(useEpisodeEdits).toHaveBeenLastCalledWith('dataset-1', 0, 'principal-test', [])
   })
 })

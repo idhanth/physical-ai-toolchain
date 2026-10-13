@@ -217,6 +217,48 @@ describe('saved episode edits', () => {
     },
   }
 
+  it.each(['omitted', 'deleted'] as const)(
+    'hydrates recorded subtasks with saved subtasks %s without replacing newer drafts',
+    async (choice) => {
+      const recorded = [
+        {
+          id: 'recorded-0',
+          label: 'Reach',
+          frameRange: [0, 4] as [number, number],
+          color: '#3b82f6',
+          source: 'recorded' as const,
+        },
+      ]
+      mockFetch.mockResolvedValue(
+        jsonResponse(
+          {
+            ...state,
+            saved: {
+              ...state.saved,
+              operations: { ...operations, subtasks: choice === 'deleted' ? [] : undefined },
+            },
+          },
+          { headers: { ETag: 'one' } },
+        ),
+      )
+      const { result, rerender } = renderHookWithProviders(
+        ({ subtasks }) => useEpisodeEdits('ds-1', 0, 'me', subtasks),
+        { initialProps: { subtasks: recorded } },
+      )
+      await waitFor(() => expect(result.current.isReady).toBe(true))
+      expect(useEditStore.getState().subtasks).toEqual(choice === 'deleted' ? [] : recorded)
+      expect(useEditStore.getState().isDirty).toBe(false)
+      expect(useEditStore.getState().serverBaseline?.operations.subtasks).toEqual(
+        choice === 'deleted' ? [] : undefined,
+      )
+
+      act(() => useEditStore.getState().toggleFrameRemoval(5))
+      rerender({ subtasks: structuredClone(recorded) })
+      expect(useEditStore.getState().removedFrames.has(5)).toBe(true)
+      expect(useEditStore.getState().isDirty).toBe(true)
+    },
+  )
+
   it.each([
     { schema_version: '2.0.0' },
     { dataset_id: 'other' },
