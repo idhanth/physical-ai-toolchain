@@ -137,15 +137,18 @@ class TestDetectionAndDiscovery:
         assert handler.has_loader("dataset") is True
         constructor.assert_called_once_with(tmp_path)
 
-    def test_rejects_loader_constructor_failure(self, monkeypatch, tmp_path):
+    def test_rejects_loader_constructor_failure(self, monkeypatch, tmp_path, caplog):
         monkeypatch.setattr(handler_module, "is_lerobot_dataset", lambda path: True)
-        constructor = MagicMock(side_effect=RuntimeError("invalid dataset"))
+        constructor = MagicMock(side_effect=RuntimeError("private-loader-payload\r\nforged"))
         monkeypatch.setattr(handler_module, "LeRobotLoader", constructor)
         handler = LeRobotFormatHandler()
 
-        assert handler.get_loader("dataset", tmp_path) is False
-        assert handler.has_loader("dataset") is False
+        assert handler.get_loader("dataset\r\nforged", tmp_path) is False
+        assert handler.has_loader("dataset\r\nforged") is False
         constructor.assert_called_once_with(tmp_path)
+        assert "Failed to create LeRobot loader" in caplog.text
+        assert "private-loader-payload" not in caplog.text
+        assert all("\r" not in record.getMessage() and "\n" not in record.getMessage() for record in caplog.records)
 
     def test_lists_episodes_without_registering_loader(self, monkeypatch, tmp_path):
         loader = FakeLoader(tmp_path)

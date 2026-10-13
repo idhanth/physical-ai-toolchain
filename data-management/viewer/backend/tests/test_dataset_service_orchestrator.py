@@ -163,7 +163,7 @@ class TestDatasetDiscovery:
             ValueError,
             match="Source storage unavailable" if operation == "edit" else "Source generation is unavailable",
         ):
-            await call
+            _ = await call
 
     async def test_given_replaced_edit_context_when_reading_then_scratch_replaced_and_reused(
         self,
@@ -1160,6 +1160,29 @@ class TestBlobVideoAccess:
         assert stream_calls == 2
         service.cleanup_temp_dirs()
         assert not first.exists() and not replaced.exists()
+
+    @pytest.mark.parametrize("blob_path", ["dataset/video.untrusted", "dataset/video.bad\\name", "../video.other"])
+    async def test_given_untrusted_blob_name_when_materializing_then_uses_fixed_cache_filename(
+        self, tmp_path: Path, blob_path: str
+    ) -> None:
+        async def stream_video(_path: str, **_kwargs: Any) -> AsyncIterator[bytes]:
+            yield b"video"
+
+        provider = _make_provider(
+            stream_video=stream_video, get_blob_properties=AsyncMock(return_value={"size": 5, "etag": '"one"'})
+        )
+        service = DatasetService(base_path=str(tmp_path), blob_provider=provider)
+
+        try:
+            result = await service.materialize_blob_video(blob_path)
+
+            assert result is not None
+            assert result.parent == service._blob_video_cache_dir
+            assert result.suffix == ".mp4"
+            assert len(result.stem) == 64 and all(character in "0123456789abcdef" for character in result.stem)
+            assert result.read_bytes() == b"video"
+        finally:
+            service.cleanup_temp_dirs()
 
     async def test_materialization_shares_concurrent_downloads_and_isolates_accounts(self, tmp_path: Path) -> None:
         started = asyncio.Event()

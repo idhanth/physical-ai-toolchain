@@ -84,11 +84,10 @@ class LeRobotFormatHandler:
         try:
             self._loaders[dataset_id] = LeRobotLoader(dataset_path)
             return True
-        except Exception as e:
+        except Exception:
             logger.warning(
-                "Failed to create LeRobot loader for %s: %s",
-                dataset_id,
-                str(e),
+                "Failed to create LeRobot loader for %s: unavailable",
+                dataset_id.replace("\r", "").replace("\n", ""),
             )
             return False
 

@@ -12,6 +12,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -336,11 +337,12 @@ class DatasetService:
             return None
         identity = json.dumps(["azure", provider.account_name, provider.container_name, blob_path, properties["etag"]])
         key = hashlib.sha256(identity.encode()).hexdigest()
+        if re.fullmatch(r"[0-9a-f]{64}", key) is None:
+            raise ValueError("Invalid video cache key")
         if self._blob_video_cache_dir is None:
             self._blob_video_cache_dir = Path(tempfile.mkdtemp(prefix="dvw_media_"))
         cache_dir = self._blob_video_cache_dir
-        suffix = Path(blob_path).suffix or ".mp4"
-        target = cache_dir / f"{key}{suffix}"
+        target = cache_dir / f"{key}.mp4"
         if target.exists() and target.stat().st_size == size:
             return target
         async with self._blob_video_locks_guard:
@@ -356,7 +358,7 @@ class DatasetService:
             temporary = None
             published = False
             try:
-                descriptor, temporary_name = tempfile.mkstemp(prefix=key, suffix=".part", dir=cache_dir)
+                descriptor, temporary_name = tempfile.mkstemp(prefix="video_", suffix=".part", dir=cache_dir)
                 temporary = Path(temporary_name)
                 transferred = 0
                 with os.fdopen(descriptor, "wb") as stream:

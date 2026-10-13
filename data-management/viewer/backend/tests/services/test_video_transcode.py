@@ -13,6 +13,18 @@ import pytest
 from src.api.services import video_transcode
 
 
+async def test_given_output_outside_cache_when_transcoding_then_rejected_before_writing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(video_transcode, "_CACHE_DIR", tmp_path / "cache")
+    target = tmp_path / "outside" / "video.mp4"
+
+    with pytest.raises(ValueError, match="Invalid video cache path"):
+        await video_transcode._transcode_to_h264(tmp_path / "source.mp4", target, 100)
+
+    assert not target.parent.exists()
+
+
 class _FakeProcess:
     def __init__(self, returncode: int, stdout: bytes = b"", stderr: bytes = b"") -> None:
         self.returncode = returncode

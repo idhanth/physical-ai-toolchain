@@ -18,6 +18,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import tempfile
 import uuid
@@ -102,8 +103,12 @@ def _cache_key(source: Path) -> str:
 
 async def _transcode_to_h264(source: Path, target: Path, max_bytes: int) -> bool:
     """Run ffmpeg, writing H.264 + AAC MP4 with faststart to ``target``."""
-    target.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(prefix=target.stem, suffix=".part", dir=target.parent)
+    normalized = os.path.normpath(os.path.realpath(str(target)))
+    if not normalized.startswith(str(_CACHE_DIR.resolve()) + os.sep):
+        raise ValueError("Invalid video cache path")
+    target = Path(normalized)
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(prefix="video_", suffix=".part", dir=_CACHE_DIR)
     os.close(descriptor)
     tmp = Path(temporary)
     source_key = _cache_key(source)
@@ -169,6 +174,8 @@ async def ensure_browser_compatible(source: Path) -> Path:
         return source
 
     key = _cache_key(source)
+    if re.fullmatch(r"[0-9a-f]{64}", key) is None:
+        raise ValueError("Invalid video cache key")
     cached = _CACHE_DIR / f"{key}.mp4"
     if cached.exists() and cached.stat().st_size > 0:
         return cached
@@ -182,7 +189,7 @@ async def ensure_browser_compatible(source: Path) -> Path:
         if available <= 0:
             _LOGGER.warning("Video conversion cache capacity exhausted")
             return source
-        _LOGGER.info("Transcoding %s (codec=%s) to H.264 cache %s", source, codec, cached)
+        _LOGGER.info("Transcoding selected video to H.264 cache")
         ok = await _transcode_to_h264(source, cached, available)
         if not ok:
             return source

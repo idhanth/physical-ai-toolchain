@@ -5,12 +5,16 @@ All storage adapters must implement this interface to support
 annotation persistence across different storage backends.
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 
 from evaluation.vlm_judge.curation_storage import RevisionConflictError as RevisionConflictError
 from evaluation.vlm_judge.curation_storage import VersionedValue as VersionedValue
 
 from ..models.annotations import EpisodeAnnotationFile
+
+__all__ = ["RevisionConflictError", "StorageAdapter", "StorageError", "VersionedValue"]
 
 
 class StorageAdapter(ABC):

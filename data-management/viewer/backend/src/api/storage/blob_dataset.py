@@ -23,6 +23,7 @@ import hashlib
 import io
 import json
 import logging
+import os
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -131,8 +132,8 @@ class BlobDatasetProvider:
             return await download.readall()
         except ResourceNotFoundError:
             return None
-        except Exception as e:
-            logger.warning("Failed to read blob '%s': %s", blob_path, e)
+        except Exception:
+            logger.warning("Failed to read blob: unavailable")
             return None
 
     # ------------------------------------------------------------------
@@ -329,8 +330,8 @@ class BlobDatasetProvider:
             }
         except ResourceNotFoundError:
             return None
-        except Exception as e:
-            logger.warning("Failed to get properties for blob '%s': %s", blob_path, e)
+        except Exception:
+            logger.warning("Failed to get properties for blob: unavailable")
             return None
 
     # ------------------------------------------------------------------
@@ -728,9 +729,10 @@ class BlobDatasetProvider:
         relative = template.format(
             episode_index=episode_index, episode_chunk=chunk_index, chunk_index=chunk_index, file_index=file_index
         )
-        target = (local_dir / relative).resolve()
-        if not relative.startswith("data/") or not target.is_relative_to(local_dir.resolve()):
+        normalized = os.path.normpath(os.path.realpath(str(local_dir / relative)))
+        if not relative.startswith("data/") or not normalized.startswith(str(local_dir.resolve() / "data") + os.sep):
             raise ValueError("Invalid episode data path")
+        target = Path(normalized)
         data = await self._read_blob_bytes(f"{self.get_blob_prefix(dataset_id)}/{relative}")
         if data is None:
             return False
@@ -882,18 +884,17 @@ class BlobDatasetProvider:
                 await asyncio.to_thread(tmp_path.replace, local_path)
                 logger.info(
                     "Downloaded HDF5 episode %d for '%s' (%d bytes)",
-                    episode_idx,
-                    dataset_id,
+                    int(episode_idx),
+                    dataset_id.replace("\r", "").replace("\n", ""),
                     written,
                 )
                 return True
             return False
-        except Exception as e:
+        except Exception:
             logger.warning(
-                "Failed to sync HDF5 episode %d for '%s': %s",
-                episode_idx,
-                dataset_id,
-                e,
+                "Failed to sync HDF5 episode %d for '%s': unavailable",
+                int(episode_idx),
+                dataset_id.replace("\r", "").replace("\n", ""),
             )
             return False
 

@@ -339,7 +339,7 @@ async def _resolve_saved_episode(
             )
         return record, snapshot
     except SavedInputError as error:
-        logger.warning("Saved judge input rejected for episode %d", episode_idx)
+        logger.warning("Saved judge input rejected for episode %d", int(episode_idx))
         raise HTTPException(status_code=error.status_code, detail=str(error)) from None
     except ValueError:
         raise HTTPException(status_code=409, detail="Saved input source changed or is unavailable") from None

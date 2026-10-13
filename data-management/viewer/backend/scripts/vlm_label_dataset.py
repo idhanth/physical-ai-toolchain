@@ -277,7 +277,7 @@ class TaskExecutor:
         try:
             return await asyncio.shield(execution)
         except asyncio.CancelledError:
-            await execution
+            _ = await execution
             raise
 
 

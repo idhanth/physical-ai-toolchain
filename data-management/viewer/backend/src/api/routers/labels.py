@@ -10,7 +10,7 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 from evaluation.vlm_judge.curation import DEFAULT_LABELS, DatasetLabelsFile, EpisodeAnalysisRecord
 from fastapi import APIRouter, Depends, Header, HTTPException, Response
@@ -39,8 +39,7 @@ from ..validation import (
     path_string_param,
 )
 
-if TYPE_CHECKING:
-    pass
+__all__ = ["BlobLabelStorage", "LocalLabelStorage", "router"]
 
 logger = logging.getLogger(__name__)
 
@@ -525,7 +524,7 @@ async def set_episode_analysis(
         "Saving analysis contributions dataset=%s episode=%d intent=%s",
         dataset_id.replace("\r", "").replace("\n", ""),
         int(episode_idx),
-        intent,
+        intent.replace("\r", "").replace("\n", ""),
     )
     response.headers["ETag"] = await _save_labels(dataset_id, labels_file, precondition)
     dataset_service.invalidate_episode_cache(dataset_id, episode_idx)

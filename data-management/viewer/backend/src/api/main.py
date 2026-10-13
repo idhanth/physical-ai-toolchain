@@ -119,7 +119,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
             worker.cancel()
         for worker in workers:
             with suppress(asyncio.CancelledError):
-                await worker
+                _ = await worker
 
     try:
         service = get_dataset_service()

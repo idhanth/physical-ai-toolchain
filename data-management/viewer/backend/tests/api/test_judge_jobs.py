@@ -520,7 +520,7 @@ async def test_cancellation_during_inference_fences_late_result(tmp_path: Path) 
     await jobs.submit("other", "actor", [1005], {}, idempotency_key="other")
     assert await jobs.claim() is None
     release.set()
-    await execution
+    assert await execution is True
 
     result = await manager(tmp_path).get(job["id"], "actor")
     assert result["status"] == "cancelled"
@@ -1041,7 +1041,7 @@ async def test_blob_transaction_waits_for_existing_lease_and_rejects_lost_revisi
         pending = asyncio.create_task(contender())
         await entered.wait()
         state["sequence"] += 1
-    await pending
+    assert await pending is None
     assert (await first.read())["sequence"] == 2
     blob.reject_publication = True
     with pytest.raises(ResourceModifiedError):
