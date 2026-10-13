@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from vlm_judge.prompts import (
     FAILURE_MODES,
     parse_failure_response,
@@ -31,6 +32,9 @@ class TestOutcomeParser:
 
 
 class TestProcessParser:
+    def test_given_malformed_array_when_parsing_then_rejects_without_coercion(self) -> None:
+        assert parse_process_response("[0,]", n_frames=1) is None
+
     def test_parses_array(self) -> None:
         out = parse_process_response("[0, 25, 50, 75, 100]", n_frames=5)
         assert out == [0, 25, 50, 75, 100]
@@ -68,6 +72,20 @@ class TestProcessParser:
 
 
 class TestMilestoneParser:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "",
+            "[]",
+            '{"milestones": []}',
+            '{"milestones": [false]}',
+            '{"milestones": [{"name": 1, "completed": true}]}',
+            '{"milestones": [{"name": "pick", "completed": "true"}]}',
+        ],
+    )
+    def test_given_invalid_milestone_shape_when_parsing_then_rejects_response(self, text: str) -> None:
+        assert parse_milestone_response(text) is None
+
     def test_parses_typical_payload(self) -> None:
         text = (
             '{"milestones": ['
@@ -99,6 +117,11 @@ class TestFailureParser:
 
 
 class TestShuffleAnchor:
+    @pytest.mark.parametrize("count", [0, -1])
+    def test_given_nonpositive_frames_when_shuffling_then_rejects_count(self, count: int) -> None:
+        with pytest.raises(ValueError, match="n_frames must be positive"):
+            shuffle_with_anchor(count)
+
     def test_first_index_is_anchored(self) -> None:
         order = shuffle_with_anchor(10)
         assert order[0] == 0

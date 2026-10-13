@@ -14,6 +14,19 @@ def _touch(path: Path, size_bytes: int = 64) -> Path:
 
 
 class TestJudgeCache:
+    def test_given_nonfinite_result_when_writing_then_preserves_previous_entry_and_removes_temporary_file(
+        self, tmp_path: Path
+    ) -> None:
+        root = tmp_path / "cache"
+        cache = JudgeCache(root)
+        cache.put("result", {"confidence": 0.8})
+
+        with pytest.raises(ValueError):
+            cache.put("result", {"confidence": float("nan")})
+
+        assert cache.get("result") == {"confidence": 0.8}
+        assert sorted(path.name for path in root.iterdir()) == ["result.json"]
+
     def test_disabled_when_root_is_none(self) -> None:
         cache = JudgeCache(None)
         assert cache.enabled is False

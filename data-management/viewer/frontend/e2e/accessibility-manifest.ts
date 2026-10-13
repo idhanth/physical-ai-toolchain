@@ -101,6 +101,14 @@ export const viewerAccessibilityManifest: ViewerAccessibilityCase[] = [
     ['PLAYWRIGHT_KEYBOARD'],
   ),
   entry(
+    'viewer-trajectory-adjustment-keyboard',
+    'V13 trajectory adjustments preserve keyboard focus and announce changes',
+    ['trajectory-adjustments'],
+    ['delta', 'set-value', 'reset', 'applied', 'reset-frame', 'cleared', 'adaptive', 'inserted'],
+    ['WCAG22-2.1.1', 'WCAG22-2.4.3', 'WCAG22-4.1.2', 'WCAG22-4.1.3', 'WCAG22-1.4.10'],
+    ['PLAYWRIGHT_KEYBOARD', 'PLAYWRIGHT_TREE', 'PLAYWRIGHT_LIVE_REGION', 'PLAYWRIGHT_VISUAL'],
+  ),
+  entry(
     'viewer-task-keyboard',
     'V07 V10 V12 and V16 task controls are keyboard operable',
     ['task-controls'],

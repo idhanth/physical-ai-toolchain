@@ -279,6 +279,100 @@ test('V05 V06 V08 and V09 composite controls support keyboard operation and exit
   expect(errors.pageErrors).toEqual([])
 })
 
+test('V13 trajectory adjustments preserve keyboard focus and announce changes', async ({
+  page,
+}, testInfo) => {
+  const errors = await openViewer(page, testInfo, { trajectoryVariables: 'joints' })
+  const play = page.getByRole('button', { name: /^(Play|Pause) playback$/ })
+  if ((await play.getAttribute('aria-label')) === 'Pause playback') await play.press('Enter')
+  await page.getByRole('button', { name: 'Reset playback', exact: true }).focus()
+  await page.getByRole('button', { name: 'Reset playback', exact: true }).press('Enter')
+  const editor = page.getByRole('group', { name: 'Frame 0 trajectory adjustments' })
+  const delta = editor.getByRole('slider', { name: 'shoulder_joint delta', exact: true })
+  const deltaInput = editor.getByRole('spinbutton', { name: 'shoulder_joint delta', exact: true })
+  const setValue = editor.getByRole('spinbutton', { name: 'shoulder_joint set value' })
+  const status = editor.getByRole('status')
+
+  await delta.focus()
+  await delta.press('ArrowRight')
+  await expect(delta).not.toHaveValue('0')
+  await setValue.focus()
+  await setValue.fill('1.25')
+  await expect(delta).toBeDisabled()
+  await expect(deltaInput).toBeDisabled()
+  await setValue.fill('')
+  await expect(delta).toBeEnabled()
+  await expect(deltaInput).toBeEnabled()
+
+  await delta.focus()
+  await delta.press('ArrowRight')
+  const reset = editor.getByRole('button', { name: 'Reset shoulder_joint', exact: true })
+  await reset.focus()
+  await reset.press('Enter')
+  await expect(reset).toHaveCount(0)
+  await expect(delta).toBeFocused()
+  await expect(status).toHaveText('Reset shoulder_joint')
+
+  await delta.press('ArrowRight')
+  const apply = editor.getByRole('button', { name: 'Apply to Frame 0', exact: true })
+  await apply.focus()
+  await apply.press('Enter')
+  await expect(apply).toBeFocused()
+  await expect(status).toHaveText('Adjusted frame 0')
+  const resetFrame = editor.getByRole('button', { name: 'Reset Frame', exact: true })
+  await resetFrame.focus()
+  await resetFrame.press('Enter')
+  await expect(editor).toBeFocused()
+  await expect(status).toHaveText('Reset frame 0')
+
+  await delta.focus()
+  await delta.press('ArrowRight')
+  await apply.focus()
+  await apply.press('Enter')
+  const clear = editor.getByRole('button', { name: 'Clear All Trajectory Adjustments' })
+  await clear.focus()
+  await clear.press('Enter')
+  await expect(clear).toHaveCount(0)
+  await expect(editor).toBeFocused()
+  await expect(status).toHaveText('Cleared all trajectory adjustments')
+
+  await page.setViewportSize({ width: 320, height: 900 })
+  await setValue.scrollIntoViewIfNeeded()
+  await setValue.focus()
+  await expect(setValue).toBeFocused()
+  const bounds = await setValue.boundingBox()
+  expect(bounds).not.toBeNull()
+  expect(bounds!.x).toBeGreaterThanOrEqual(0)
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(320)
+
+  const insert = page.getByRole('button', { name: 'Insert After Frame 0', exact: true })
+  await insert.focus()
+  await insert.press('Enter')
+  const nextFrame = page.getByRole('button', { name: 'Next frame', exact: true })
+  await nextFrame.focus()
+  await nextFrame.press('Enter')
+  await expect(page.getByText(/^This frame is inserted\./)).toBeVisible()
+  await expect(page.getByRole('group', { name: /trajectory adjustments/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Apply to Frame/ })).toHaveCount(0)
+
+  await attachJson(testInfo, 'trajectory-adjustment-keyboard-states', {
+    journeys: ['V13'],
+    states: [
+      'delta',
+      'set-value',
+      'reset',
+      'applied',
+      'reset-frame',
+      'cleared',
+      '320px',
+      'inserted',
+    ],
+    unclaimed: ['actual screen-reader speech'],
+  })
+  expect(errors.consoleErrors).toEqual([])
+  expect(errors.pageErrors).toEqual([])
+})
+
 test('V07 V10 V12 and V16 task controls are keyboard operable', async ({ page }, testInfo) => {
   const errors = await openViewer(page, testInfo)
 

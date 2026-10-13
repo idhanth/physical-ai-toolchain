@@ -80,6 +80,7 @@ export const riskComponentRegistry = [
       'annotation-workspace/AnnotationWorkspaceTopBar.tsx',
       'app-shell/DataviewerEpisodeViewer.tsx',
       'export/ExportProgress.tsx',
+      'frame-editor/TrajectoryEditor.tsx',
       'vlm-judge/JudgePanel.tsx',
     ],
     mappedEvidence: 'e2e/accessibility-states.spec.ts',

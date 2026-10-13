@@ -2587,6 +2587,8 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "av" },
+    { name = "fastapi" },
+    { name = "httpx" },
     { name = "hypothesis" },
     { name = "matplotlib" },
     { name = "numpy" },
@@ -2634,6 +2636,8 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "av", specifier = "==15.1.0" },
+    { name = "fastapi", specifier = "==0.141.1" },
+    { name = "httpx", specifier = "==0.28.1" },
     { name = "hypothesis", specifier = "==6.168.1" },
     { name = "matplotlib", specifier = "==3.11.2" },
     { name = "numpy", specifier = "==2.2.6" },

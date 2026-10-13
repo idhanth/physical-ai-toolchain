@@ -340,12 +340,18 @@ test('V08 V09 and V19 targets satisfy size or spacing and pointer cancellation',
   await page.getByRole('menuitem', { name: 'Move right' }).click()
   expect(await jointOrder()).toEqual(['target_joint', 'shoulder_joint'])
 
-  const nativeSlider = page.locator('input[type="range"]').first()
+  const pause = page.getByRole('button', { name: 'Pause playback', exact: true })
+  if (await pause.isVisible()) await pause.click()
+  const nativeSlider = page.getByRole('slider', { name: 'Playback frame', exact: true })
   const initialSliderValue = await nativeSlider.inputValue()
+  const minimum = Number(await nativeSlider.getAttribute('min'))
   const sliderBox = await nativeSlider.boundingBox()
   expect(sliderBox).not.toBeNull()
   await nativeSlider.click({
-    position: { x: 2, y: (sliderBox?.height ?? 10) / 2 },
+    position: {
+      x: Number(initialSliderValue) === minimum ? sliderBox!.width - 2 : 2,
+      y: sliderBox!.height / 2,
+    },
   })
   expect(await nativeSlider.inputValue()).not.toBe(initialSliderValue)
   expect(errors.consoleErrors).toEqual([])
