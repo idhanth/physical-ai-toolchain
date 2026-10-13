@@ -3,7 +3,7 @@ sidebar_position: 1
 title: Evaluation Guide
 description: Evaluate trained robotics policies in simulation and on physical hardware using Azure ML and NVIDIA OSMO
 author: Microsoft Robotics-AI Team
-ms.date: 2026-07-13
+ms.date: 2026-10-12
 ms.topic: overview
 keywords:
   - evaluation
@@ -14,7 +14,7 @@ keywords:
   - Azure ML
 ---
 
-Evaluate trained robotics policies using local environments, Azure ML compute, or NVIDIA OSMO workflows. This guide covers LeRobot ACT policy evaluation and OSMO-managed evaluation for Isaac Lab and LeRobot workloads.
+Evaluate trained robotics policies on Azure ML or NVIDIA OSMO, or replay LeRobot policies locally. Run the commands below from the repository root after deploying the infrastructure; the submission scripts read Azure context from Terraform outputs unless you pass it explicitly.
 
 ## 📖 Evaluation Guides
 
@@ -26,31 +26,36 @@ Evaluate trained robotics policies using local environments, Azure ML compute, o
 
 ## ⚖️ Evaluation Comparison
 
-| Feature              | Local / Azure ML        | OSMO                        |
-|----------------------|-------------------------|-----------------------------|
-| Orchestration        | Manual or Azure ML jobs | OSMO workflow engine        |
-| Checkpoint source    | MLflow, HuggingFace     | MLflow, Azure Blob, HTTP(S) |
-| Supported frameworks | LeRobot                 | Isaac Lab, LeRobot          |
-| GPU management       | User-managed            | KAI Scheduler               |
-| Monitoring           | Local logs              | `osmo workflow logs`        |
+| Feature              | Azure ML                                 | OSMO                                                                     |
+|----------------------|------------------------------------------|--------------------------------------------------------------------------|
+| Submission script    | `submit-azureml-*.sh`                    | `submit-osmo-*.sh`                                                       |
+| Policy source        | Azure ML model registry, HuggingFace Hub | Isaac Lab: MLflow, Azure Blob, HTTP(S); LeRobot: Azure ML or HuggingFace |
+| Supported frameworks | Isaac Lab, LeRobot, pi0-family VLA       | Isaac Lab, LeRobot                                                       |
+| GPU scheduling       | Azure ML compute target                  | KAI Scheduler                                                            |
+| Monitoring           | Azure ML studio                          | `osmo workflow logs`                                                     |
 
 ## 🚀 Quick Start
 
-LeRobot local evaluation:
+Evaluate a LeRobot policy on Azure ML against a pinned dataset revision:
 
 ```bash
-python lerobot/scripts/eval.py \
-  --policy.path=<path-to-checkpoint> \
-  -p lerobot/configs/policy/act.yaml
+evaluation/sil/scripts/submit-azureml-lerobot-eval.sh \
+  --from-aml-model \
+  --model-name <model-name> \
+  --model-version <version> \
+  --dataset-repo-id <owner/dataset> \
+  --dataset-revision <commit-sha>
 ```
 
-OSMO evaluation submission:
+Evaluate an Isaac Lab checkpoint through OSMO. The script packages the evaluation code and supplies the entry script that the workflow template requires:
 
 ```bash
-osmo workflow submit \
-  --file evaluation/sil/workflows/osmo/eval.yaml \
-  --set checkpoint_uri=<checkpoint-uri>
+evaluation/sil/scripts/submit-osmo-eval.sh \
+  --checkpoint-uri runs:/<run-id>/model \
+  --task <isaac-lab-task>
 ```
+
+Add `--config-preview` to either submission script to print the resolved configuration without submitting. For local LeRobot replay and ROS 2 deployment, see [LeRobot ACT Policy Evaluation](lerobot-evaluation.md).
 
 ## 📚 Related Documentation
 

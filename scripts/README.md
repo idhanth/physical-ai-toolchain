@@ -2,7 +2,7 @@
 title: Scripts
 description: CI/CD scripts, shared libraries, linting, security, and Pester tests for the Physical AI Toolchain.
 author: Microsoft Robotics-AI Team
-ms.date: 2026-10-07
+ms.date: 2026-10-12
 ms.topic: reference
 keywords:
   - scripts
@@ -45,16 +45,21 @@ Shared utility modules used across scripts and workflows.
 
 ## 🚀 CI Scripts
 
-CI bootstrap and release automation.
+CI bootstrap, release, and scheduled maintenance automation.
 
-| Script                                | Purpose                                                 |
-|---------------------------------------|---------------------------------------------------------|
-| `ci/Add-ReleaseVerificationNotes.ps1` | Add release verification notes                          |
-| `ci/Close-ReleaseMilestone.ps1`       | Close the milestone associated with a completed release |
-| `ci/Install-Gitsign.ps1`              | Install the pinned gitsign release                      |
-| `ci/New-SignedReleaseTag.ps1`         | Create a signed release tag                             |
-| `ci/New-SigningArtifacts.ps1`         | Generate release signing artifacts                      |
-| `ci/Update-ChangelogMsDate.ps1`       | Refresh changelog metadata dates                        |
+| Script                                 | Purpose                                                  |
+|----------------------------------------|----------------------------------------------------------|
+| `ci/Add-ReleaseVerificationNotes.ps1`  | Add release verification notes                           |
+| `ci/Close-ReleaseMilestone.ps1`        | Close the milestone associated with a completed release  |
+| `ci/Install-Gitsign.ps1`               | Install the pinned gitsign release                       |
+| `ci/New-SignedReleaseTag.ps1`          | Create a signed release tag                              |
+| `ci/New-SigningArtifacts.ps1`          | Generate release signing artifacts                       |
+| `ci/Sync-StaleDocumentationIssues.ps1` | Create or update one issue for each stale `ms.date` file |
+| `ci/Update-ChangelogMsDate.ps1`        | Refresh changelog metadata dates                         |
+
+### Stale documentation issues
+
+Weekly Validation fails when any `ms.date` is older than 90 days, then `Sync-StaleDocumentationIssues.ps1` creates one issue per stale file or updates and comments on that file's open issue. It validates the freshness report before changing issues and stops with an error on the first failed GitHub CLI operation. Pull request freshness checks remain advisory.
 
 ### Required validation gates
 

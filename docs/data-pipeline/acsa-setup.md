@@ -3,7 +3,7 @@ sidebar_position: 2
 title: ACSA Setup for ROS 2 Bag Sync
 description: Deploy Azure Container Storage enabled by Azure Arc (ACSA) on edge clusters to sync ROS 2 bag files to Azure Blob Storage
 author: Microsoft Robotics-AI Team
-ms.date: 2026-07-13
+ms.date: 2026-10-12
 ms.topic: how-to
 keywords:
   - acsa
@@ -50,14 +50,15 @@ Recording pods mount the `recording-data` PVC and write bag files to it. The ACS
 
 ## 📋 Prerequisites
 
-| Requirement                     | Details                                                                                              |
-|---------------------------------|------------------------------------------------------------------------------------------------------|
-| Azure Arc-connected K8s cluster | Edge cluster registered with Azure Arc (`az connectedk8s show`)                                      |
-| Azure CLI 2.60+                 | With `k8s-extension` and `connectedk8s` extensions                                                   |
-| Terraform outputs               | Infrastructure deployed via `infrastructure/terraform/` with a storage account                       |
-| kubectl + envsubst              | For manifest rendering and application                                                               |
-| Azure RBAC                      | Contributor on the Arc cluster resource group; Storage Blob Data Contributor on the target container |
-| Network connectivity            | Direct kubectl access or Arc proxy for private clusters                                              |
+| Requirement                     | Details                                                                                                                                                                             |
+|---------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Azure Arc-connected K8s cluster | Edge cluster registered with Azure Arc (`az connectedk8s show`)                                                                                                                     |
+| Azure CLI 2.60+                 | With `k8s-extension` and `connectedk8s` extensions                                                                                                                                  |
+| Storage account                 | Pass `--storage-account`, or deploy `infrastructure/terraform/` with local state so the script can discover it                                                                      |
+| kubectl + envsubst              | For manifest rendering and application                                                                                                                                              |
+| terraform + jq                  | Required only when the script reads a local `terraform.tfstate`                                                                                                                     |
+| Azure RBAC                      | Contributor on the Arc cluster resource group; Storage Blob Data Contributor on the storage account to create the container; permission to create role assignments on the container |
+| Network connectivity            | Direct kubectl access or Arc proxy for private clusters                                                                                                                             |
 
 > [!NOTE]
 > The deploy script automatically installs missing Azure CLI extensions (`k8s-extension`, `connectedk8s`).
@@ -75,7 +76,7 @@ cd data-pipeline/setup
   --kubeconfig <edge-kubeconfig> \
   --context <edge-context>
 
-# Deploy ACSA with Terraform auto-discovery
+# Deploy ACSA with explicit values
 ./deploy-acsa.sh \
   --cluster-name <arc-cluster> \
   --cluster-resource-group <rg> \
@@ -84,24 +85,24 @@ cd data-pipeline/setup
   --context <edge-context>
 ```
 
-The script reads storage account details from `infrastructure/terraform/terraform.tfstate`. Override any value via CLI arguments or environment variables.
+When `infrastructure/terraform/terraform.tfstate` exists, the script reads Terraform outputs to discover the cluster resource group, storage account, and storage account resource group, so you can omit `--cluster-resource-group` and `--storage-account`. Explicit arguments and environment variables take precedence. Without local state, pass the storage account and resource groups explicitly.
 
 ## ⚙️ Configuration
 
 ### Script Arguments
 
-| Argument                   | Environment Variable             | Default                          | Description                              |
-|----------------------------|----------------------------------|----------------------------------|------------------------------------------|
-| `--cluster-name`           | `ARC_CLUSTER_NAME`               | (required)                       | Arc-connected cluster name               |
-| `--cluster-resource-group` | `ARC_RESOURCE_GROUP`             | (required)                       | Resource group of the Arc cluster        |
-| `-t, --tf-dir`             | `DEFAULT_TF_DIR`                 | `../../infrastructure/terraform` | Terraform directory for output discovery |
-| `--storage-account`        | `STORAGE_ACCOUNT_NAME`           | Auto-discovered from Terraform   | Storage account name override            |
-| `--storage-resource-group` | `STORAGE_ACCOUNT_RESOURCE_GROUP` | Same as cluster resource group   | Storage account resource group           |
-| `--kubeconfig`             | `EDGE_KUBECONFIG`                | Required in direct mode          | Explicit edge kubeconfig                 |
-| `--context`                | `EDGE_K3S_CONTEXT`               | Required in direct mode          | Explicit edge context                    |
-| `--connectivity-mode`      | `ACSA_CONNECTIVITY_MODE`         | `direct`                         | `direct` or `proxy`                      |
-| `--proxy-port`             | `ACSA_PROXY_PORT`                | `47011`                          | Arc proxy port (proxy mode only)         |
-| `--config-preview`         | —                                | —                                | Print configuration and exit             |
+| Argument                   | Environment Variable             | Default                                       | Description                              |
+|----------------------------|----------------------------------|-----------------------------------------------|------------------------------------------|
+| `--cluster-name`           | `ARC_CLUSTER_NAME`               | (required)                                    | Arc-connected cluster name               |
+| `--cluster-resource-group` | `ARC_RESOURCE_GROUP`             | Auto-discovered from Terraform, else required | Resource group of the Arc cluster        |
+| `-t, --tf-dir`             | `DEFAULT_TF_DIR`                 | `../../infrastructure/terraform`              | Terraform directory for output discovery |
+| `--storage-account`        | `STORAGE_ACCOUNT_NAME`           | Auto-discovered from Terraform                | Storage account name override            |
+| `--storage-resource-group` | `STORAGE_ACCOUNT_RESOURCE_GROUP` | Terraform storage account, else cluster RG    | Storage account resource group           |
+| `--kubeconfig`             | `EDGE_KUBECONFIG`                | Required in direct mode                       | Explicit edge kubeconfig                 |
+| `--context`                | `EDGE_K3S_CONTEXT`               | `physical-ai-edge`                            | Explicit edge context                    |
+| `--connectivity-mode`      | `ACSA_CONNECTIVITY_MODE`         | `direct`                                      | `direct` or `proxy`                      |
+| `--proxy-port`             | `ACSA_PROXY_PORT`                | `47011`                                       | Arc proxy port (proxy mode only)         |
+| `--config-preview`         | —                                | —                                             | Print configuration and exit             |
 
 ### Defaults Configuration
 
@@ -140,18 +141,20 @@ ACSA `IngestSubvolume` controls how files move from edge to cloud:
 
 The `deploy-acsa.sh` script executes these steps in order:
 
-1. Read Terraform outputs to discover the storage account and resource group
-2. Validate cluster connectivity (direct kubectl or Arc proxy)
-3. Create the `data-pipeline` namespace
-4. Install the `arc-cert-manager` extension (ACSA dependency)
-5. Wait for cert-manager to reach `Succeeded` state
-6. Install the `azure-arc-containerstorage` extension
-7. Wait for ACSA extension to reach `Succeeded` state
-8. Retrieve the ACSA managed identity principal ID
-9. Create the `datasets` Blob container
-10. Assign `Storage Blob Data Contributor` to the ACSA identity on that container
-11. Render and apply the PVC and IngestSubvolume manifests
-12. Wait for the PVC to bind and EdgeVolume to deploy
+1. Read Terraform outputs when local state exists, then apply explicit overrides
+2. Validate required inputs and install missing Azure CLI extensions
+3. Create the `datasets` Blob container
+4. Prepare cluster connectivity (direct kubeconfig or temporary Arc proxy)
+5. Create the `data-pipeline` namespace
+6. Install or update the `arc-cert-manager` extension (ACSA dependency)
+7. Wait for cert-manager to reach `Succeeded` state
+8. Install or update the `azure-arc-containerstorage` extension
+9. Wait for ACSA extension to reach `Succeeded` state
+10. Retrieve the ACSA managed identity principal ID
+11. Assign `Storage Blob Data Contributor` to the ACSA identity on the container, unless already assigned
+12. Render and apply the PVC and IngestSubvolume manifests
+
+The script does not wait for the PVC to bind. Run the verification commands below after it finishes.
 
 ## 🔌 Connectivity Modes
 

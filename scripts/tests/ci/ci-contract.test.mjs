@@ -1667,6 +1667,40 @@ test('ms.date freshness: PR scans are advisory while weekly scans remain strict'
     message.includes('msdate-freshness: advisory freshness must check changed files only')));
 });
 
+test('stale-document notifications: weekly failures delegate to the checked issue notifier', () => {
+  const weeklyJob = graph[weeklyPath].jobs['create-stale-docs-issues'];
+  assert.equal(weeklyJob.uses, './.github/workflows/create-stale-docs-issues.yml');
+  assert.deepEqual(weeklyJob.needs, ['msdate-freshness']);
+  assert.deepEqual(weeklyJob.with, { 'threshold-days': 90, 'artifact-name': 'msdate-freshness-results' });
+  assert.deepEqual(weeklyJob.permissions, { contents: 'read', issues: 'write' });
+  assert.equal(graph[weeklyPath].jobs['msdate-freshness'].with['staleness-threshold-days'], 90);
+
+  const upload = graph['.github/workflows/msdate-freshness-check.yml'].jobs['msdate-freshness'].steps
+    .find(step => step.name === 'Upload freshness check results');
+  assert.equal(upload.if, 'always()');
+  assert.deepEqual(upload.with, { name: 'msdate-freshness-results', path: 'logs/msdate-freshness-results.json', 'retention-days': 30 });
+
+  const notifierPath = '.github/workflows/create-stale-docs-issues.yml';
+  const notifierJob = graph[notifierPath].jobs['create-stale-docs-issues'];
+  assert.deepEqual(notifierJob.permissions, { contents: 'read', issues: 'write' });
+  const download = notifierJob.steps.find(step => step.name === 'Download freshness check results');
+  assert.deepEqual(download.with, { name: '${{ inputs.artifact-name }}', path: 'logs' });
+  const notify = notifierJob.steps.find(step => step.name === 'Create or Update Issues (One Per File)');
+  assert.deepEqual(notify.env, {
+    GH_TOKEN: '${{ github.token }}',
+    RESULTS_FILE: '${{ inputs.results-file }}',
+    THRESHOLD_DAYS: '${{ inputs.threshold-days }}',
+    GITHUB_REPOSITORY: '${{ github.repository }}',
+    GITHUB_SERVER_URL: '${{ github.server_url }}',
+    GITHUB_RUN_ID: '${{ github.run_id }}',
+  });
+  assert.match(notify.run, /^\s*& \.\/scripts\/ci\/Sync-StaleDocumentationIssues\.ps1 @params$/m);
+  assert.match(notify.run, /^\s*if \(\$LASTEXITCODE -ne 0\) \{ exit \$LASTEXITCODE \}$/m);
+  assert.doesNotMatch(notify.run, /\$\{\{/);
+  assert.ok(notifierJob.steps.every(step => !/\bgh\s+issue\b/.test(step.run ?? '')),
+    'stale-document issue operations must stay in the checked notifier script');
+});
+
 test('ms.date freshness: tolerated findings remain visible without blocking PR validation', t => {
   const needs = outcomeFixture(t);
   const { context } = freshEvidence(t, needs, 'pr');
