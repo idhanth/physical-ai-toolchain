@@ -203,7 +203,7 @@ test('accessibility coverage: Codecov uses OIDC and fails closed on the exact re
   assert.ok(upload, 'Missing Python Codecov upload');
   assert.deepEqual(upload.with, {
     files: 'coverage/coverage-accessibility.xml', disable_search: true, use_oidc: true,
-    use_pypi: true, use_legacy_upload_endpoint: true, fail_ci_if_error: true,
+    use_pypi: true, fail_ci_if_error: true,
     url: 'https://codecov.io', flags: 'pytest-accessibility',
     name: 'pytest-accessibility-coverage',
   });
@@ -1593,7 +1593,7 @@ test('real contract: advisory OSV and Terraform security cannot block the requir
 
 test('real contract: all whole-step tolerated lanes remain advisory but container execution is required', t => {
   const needs = outcomeFixture(t, { all: true });
-  for (const id of ['markdown-link-check', 'terraform-tests', 'terraform-docs-check']) needs[id] = { result: 'failure' };
+  for (const id of ['msdate-freshness', 'markdown-link-check', 'terraform-tests', 'terraform-docs-check']) needs[id] = { result: 'failure' };
   assert.deepEqual(evaluateChecks(needs, contract), []);
   needs['container-scan'].outputs['work-status'] = 'failure';
   assert.ok(evaluateChecks(needs, contract).some(error => error.startsWith('container-scan:')));
@@ -2162,7 +2162,7 @@ test('soft-fail policy: explicit false overrides a mutated true callee default',
 });
 
 test('soft-fail policy: every declared advisory exception passes unchanged', () => {
-  for (const id of ['markdown-link-check', 'container-scan', 'terraform-security', 'terraform-tests', 'terraform-docs-check']) {
+  for (const id of ['msdate-freshness', 'markdown-link-check', 'container-scan', 'terraform-security', 'terraform-tests', 'terraform-docs-check']) {
     const lane = contract.lanes.find(candidate => candidate.id === id);
     assert.ok(Object.values(lane.softFailPolicy).every(Boolean), `${id} must remain explicitly advisory`);
   }
