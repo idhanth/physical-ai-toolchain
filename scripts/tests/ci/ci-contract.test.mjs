@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs, { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { syncBuiltinESMExports } from 'node:module';
+import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, matchesGlob } from 'node:path';
 import test from 'node:test';
@@ -152,6 +152,35 @@ test('coverage boundary: fuzz workflow retains test selection and all measured s
   assert.equal(upload.with.files, 'logs/coverage-fuzz.xml');
 });
 
+test('frontend coverage: each upload uses one flag and only the explicit report', () => {
+  const steps = graph['.github/workflows/dataviewer-frontend-tests.yml'].jobs['frontend-checks'].steps;
+  const uploads = steps.filter(step => step.uses?.startsWith('codecov/codecov-action@'));
+  assert.deepEqual(uploads.map(step => step.with.flags), [
+    'vitest', 'vitest-components', 'vitest-features', 'vitest-lib', 'vitest-state', 'vitest-app',
+  ]);
+  assert.equal(new Set(uploads.map(step => step.with.name)).size, uploads.length);
+  for (const upload of uploads) {
+    assert.equal(upload.with.files, 'data-management/viewer/frontend/coverage/cobertura-coverage.xml');
+    assert.equal(upload.with.disable_search, true);
+    assert.equal(upload.with.use_oidc, true);
+    assert.equal(upload.if, '${{ inputs.code-coverage && always() }}');
+  }
+});
+
+test('Docusaurus coverage: LCOV sources and upload network use the repository root', () => {
+  const require = createRequire(import.meta.url);
+  const config = require(join(root, 'docs/docusaurus/jest.config.js'));
+  const reporter = config.coverageReporters.find(item => Array.isArray(item) && item[0] === 'lcov');
+  assert.ok(reporter, 'LCOV must explicitly configure its source-path root');
+  assert.equal(reporter[1].projectRoot, root.replace(/\/$/, ''));
+  const steps = graph['.github/workflows/docusaurus-tests.yml'].jobs['docusaurus-codecov'].steps;
+  const upload = steps.find(step => step.id === 'codecov');
+  assert.equal(upload.with.files, 'coverage/lcov.info');
+  assert.equal(upload.with.root_dir, undefined);
+  assert.equal(upload.with.disable_search, true);
+  assert.equal(upload.with.flags, 'docusaurus');
+});
+
 test('accessibility coverage: exact report upload isolates OIDC and fails closed', () => {
   const workflow = graph['.github/workflows/accessibility-evidence.yml'];
   const verify = candidate => {
@@ -182,7 +211,7 @@ test('accessibility coverage: exact report upload isolates OIDC and fails closed
     assert.match(upload.uses, /^codecov\/codecov-action@[a-f0-9]{40}$/);
     assert.deepEqual(upload.with, {
       files: 'coverage/coverage-accessibility.xml', disable_search: true, use_oidc: true,
-      use_pypi: true, use_legacy_upload_endpoint: true, fail_ci_if_error: true,
+      use_pypi: true, fail_ci_if_error: true,
       url: 'https://codecov.io', flags: 'pytest-accessibility',
       name: 'pytest-accessibility-coverage',
     });
@@ -1652,9 +1681,39 @@ test('outcomes: advisory OSV and Terraform security cannot block the required ag
   assert.deepEqual(evaluateChecks(needs, contract), []);
 });
 
+test('ms.date freshness: PR scans are advisory while weekly scans remain strict', () => {
+  assert.equal(graph[prPath].jobs['msdate-freshness'].with['soft-fail'], true);
+  assert.equal(graph[prPath].jobs['msdate-freshness'].with['changed-files-only'], true);
+  assert.ok(graph[prPath].jobs[summaryId].needs.includes('msdate-freshness'));
+  assert.equal(graph[weeklyPath].jobs['msdate-freshness'].with['soft-fail'], false);
+  assert.equal(graph[weeklyPath].jobs['msdate-freshness'].with['changed-files-only'], false);
+  assert.equal(graph[weeklyPath].jobs['create-stale-docs-issues'].if,
+    "failure() && needs.msdate-freshness.result == 'failure'");
+  assert.equal(graph['.github/workflows/msdate-freshness-check.yml'].on.workflow_call.inputs['soft-fail'].default, false);
+  const candidate = structuredClone(graph);
+  candidate[prPath].jobs['msdate-freshness'].with['changed-files-only'] = false;
+  assert.ok(validateWorkflows(candidate, contract).some(message =>
+    message.includes('msdate-freshness: advisory freshness must check changed files only')));
+});
+
+test('ms.date freshness: tolerated findings remain visible without blocking PR validation', t => {
+  const needs = outcomeFixture(t);
+  const { context } = freshEvidence(t, needs, 'pr');
+  needs['msdate-freshness'] = {
+    result: 'success',
+    outputs: executionOutputs({ 'work-status': 'failure', 'first-failure': 'freshness' }),
+  };
+  assert.deepEqual(evaluateChecks(needs, contract), []);
+  const summary = buildSummary(needs, contract, 'pr', context);
+  assert.equal(summary.report.status, 'success');
+  const row = summary.report.rows.find(item => item.job === 'msdate-freshness');
+  assert.equal(row.classification, 'advisory');
+  assert.equal(row.status, 'failure');
+});
+
 test('outcomes: all whole-step tolerated lanes remain advisory but container execution is required', t => {
   const needs = outcomeFixture(t, { all: true });
-  for (const id of ['markdown-link-check', 'terraform-tests', 'terraform-docs-check']) needs[id] = { result: 'failure' };
+  for (const id of ['msdate-freshness', 'markdown-link-check', 'terraform-tests', 'terraform-docs-check']) needs[id] = { result: 'failure' };
   assert.deepEqual(evaluateChecks(needs, contract), []);
   needs['container-scan'].outputs['work-status'] = 'failure';
   assert.ok(evaluateChecks(needs, contract).some(error => error.startsWith('container-scan:')));
@@ -2235,7 +2294,7 @@ test('soft-fail policy: explicit false overrides a mutated true callee default',
 });
 
 test('soft-fail policy: every declared advisory exception passes unchanged', () => {
-  for (const id of ['markdown-link-check', 'container-scan', 'terraform-security', 'terraform-tests', 'terraform-docs-check']) {
+  for (const id of ['msdate-freshness', 'markdown-link-check', 'container-scan', 'terraform-security', 'terraform-tests', 'terraform-docs-check']) {
     const lane = contract.lanes.find(candidate => candidate.id === id);
     assert.ok(Object.values(lane.softFailPolicy).every(Boolean), `${id} must remain explicitly advisory`);
   }
