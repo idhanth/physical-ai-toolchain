@@ -342,6 +342,22 @@ class TestExportEpisode:
         assert result.success is False
         assert result.error and "No HDF5 file found for episode 999" in result.error
 
+    def test_failed_write_leaves_no_partial_or_replaced_episode(
+        self, exporter: HDF5Exporter, hdf5_export_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        existing = hdf5_export_dir / "episode_000000.hdf5"
+        existing.write_bytes(b"previous export")
+
+        def fail(*_args: object) -> None:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(exporter, "_export_metadata", fail)
+        result = exporter.export_episode(episode_index=0)
+
+        assert result.success is False
+        assert existing.read_bytes() == b"previous export"
+        assert not (hdf5_export_dir / "episode_000000.hdf5.partial").exists()
+
     def test_export_multiple_episodes(self, exporter: HDF5Exporter, hdf5_export_dir: Path) -> None:
         result = exporter.export_episodes(episode_indices=[0, 1, 2])
 

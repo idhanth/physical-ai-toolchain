@@ -174,33 +174,38 @@ class HDF5Exporter:
             # Output file path
             output_path = self.dst_path / f"episode_{episode_index:06d}.hdf5"
 
-            # Export to HDF5
-            with h5py.File(output_path, "w") as dst:
-                # Copy and filter trajectory data
-                self._export_trajectory_data(
-                    dst,
-                    episode,
-                    valid_indices,
-                    edits.inserted_frames if edits else None,
-                    edits.trajectory_adjustments if edits else None,
-                )
-
-                # Apply transforms and export images
-                if episode.images:
-                    self._export_images(
+            # Write beside the destination and rename into place, so a failed write leaves no partial episode.
+            partial_path = output_path.with_name(f"{output_path.name}.partial")
+            try:
+                with h5py.File(partial_path, "w") as dst:
+                    # Copy and filter trajectory data
+                    self._export_trajectory_data(
                         dst,
-                        episode.images,
+                        episode,
                         valid_indices,
-                        edits.global_transform if edits else None,
-                        edits.camera_transforms if edits else None,
-                        progress_callback,
-                        episode_index,
-                        output_frames,
                         edits.inserted_frames if edits else None,
+                        edits.trajectory_adjustments if edits else None,
                     )
 
-                # Copy metadata
-                self._export_metadata(dst, episode, edits)
+                    # Apply transforms and export images
+                    if episode.images:
+                        self._export_images(
+                            dst,
+                            episode.images,
+                            valid_indices,
+                            edits.global_transform if edits else None,
+                            edits.camera_transforms if edits else None,
+                            progress_callback,
+                            episode_index,
+                            output_frames,
+                            edits.inserted_frames if edits else None,
+                        )
+
+                    # Copy metadata
+                    self._export_metadata(dst, episode, edits)
+                partial_path.replace(output_path)
+            finally:
+                partial_path.unlink(missing_ok=True)
 
             output_files.append(str(output_path))
 

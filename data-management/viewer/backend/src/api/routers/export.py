@@ -159,23 +159,28 @@ class ExportResultResponse(BaseModel):
 def _prepare_output(service: DatasetService, dataset_id: str, dataset_path: Path, output_path: Path) -> bool:
     """Validate the output path for the source's format and return whether the source is a LeRobot dataset.
 
-    A LeRobot export writes a new dataset, so its path must be new or empty and must neither sit inside
-    nor contain the source. What a stopped export left, a lock file or a claim, goes on to the exporter,
-    which recovers or refuses it. These checks run before anything is created; an HDF5 export creates its
-    directory.
+    Every export writes a new dataset, so its path must be new or empty and must neither sit inside nor
+    contain the source. For LeRobot, what a stopped export left, a lock file or a claim, goes on to the
+    exporter, which recovers or refuses it. These checks run before anything is created; an HDF5 export
+    creates its directory.
     """
+    if output_path.is_relative_to(dataset_path) or dataset_path.is_relative_to(output_path):
+        raise HTTPException(
+            status_code=400,
+            detail="Output path must be outside the source dataset and must not contain it",
+        )
     if service.dataset_is_lerobot(dataset_id):
-        if output_path.is_relative_to(dataset_path) or dataset_path.is_relative_to(output_path):
-            raise HTTPException(
-                status_code=400,
-                detail="Output path must be outside the source dataset and must not contain it",
-            )
         if not admits_export(output_path):
             raise HTTPException(
                 status_code=400,
                 detail="Output path must be a new or empty directory for a LeRobot export",
             )
         return True
+    if output_path.is_dir() and any(output_path.iterdir()):
+        raise HTTPException(
+            status_code=400,
+            detail="Output path must be a new or empty directory for an HDF5 export",
+        )
     try:
         output_path.mkdir(parents=True, exist_ok=True)
     except Exception as e:
