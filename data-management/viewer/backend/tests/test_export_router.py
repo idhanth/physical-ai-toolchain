@@ -678,6 +678,19 @@ class TestOutputLocations:
         assert not (source / "derived").exists()
         exporter.assert_not_called()
 
+    @pytest.mark.parametrize("endpoint", ["export", "stream"])
+    def test_hdf5_export_is_refused_while_another_export_holds_the_output(
+        self, client: TestClient, override_service, dataset_layout, endpoint: str
+    ) -> None:
+        _base, _dataset, output_dir = dataset_layout
+
+        with hold_lock(output_dir):
+            result = _export_through(client, endpoint, output_dir)
+            assert sorted(path.name for path in output_dir.iterdir()) == [LOCK_FILE]
+
+        assert result["success"] is False
+        assert result["error"] == "Export failed"
+
     def test_hdf5_stream_refuses_the_source_as_output(
         self, client: TestClient, override_service, dataset_layout, monkeypatch: pytest.MonkeyPatch
     ) -> None:

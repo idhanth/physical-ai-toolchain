@@ -31,7 +31,7 @@ from ..services.episode_edits import (
     parse_edit_operations,
 )
 from ..services.hdf5_exporter import HDF5Exporter
-from ..services.lerobot_exporter import LeRobotExporter, admits_export
+from ..services.lerobot_exporter import LOCK_FILE, LeRobotExporter, admits_export
 from ..services.lerobot_language import LanguageInstruction
 from ..validation import (
     SAFE_DATASET_ID_PATTERN,
@@ -176,7 +176,8 @@ def _prepare_output(service: DatasetService, dataset_id: str, dataset_path: Path
                 detail="Output path must be a new or empty directory for a LeRobot export",
             )
         return True
-    if output_path.is_dir() and any(output_path.iterdir()):
+    # A lone lock file is left to the exporter, which refuses it while another export holds the lock.
+    if output_path.is_dir() and any(entry.name != LOCK_FILE for entry in output_path.iterdir()):
         raise HTTPException(
             status_code=400,
             detail="Output path must be a new or empty directory for an HDF5 export",
